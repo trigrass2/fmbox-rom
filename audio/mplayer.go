@@ -1,5 +1,5 @@
 
-package main
+package audio
 
 import (
 	"bytes"
@@ -138,7 +138,6 @@ func (mp *Mplayer) Pos() (pos time.Duration) {
 
 func (mp *Mplayer) Play(uri string) {
 	log.Println("Play", uri)
-	uri = "http://localhost:1653" + strings.TrimPrefix(uri, "http:/")
 	fmt.Fprintln(mp.cmdIn, "load", uri)
 	go func () {
 		select {

@@ -1,5 +1,5 @@
 
-package fm
+package main
 
 import (
 	"time"
@@ -8,7 +8,7 @@ import (
 )
 
 type Eink struct {
-	BUS, SCLK, SDA, BUSY, CS, RST, DC Pin
+	BUS, SCLK, SDA, BUSY, CS, RST, DC gpio.Pin
 }
 
 func NewEink() *Eink {
@@ -21,13 +21,13 @@ func NewEink() *Eink {
 	// 13:SCLK
 	// 14:SDA
 	e := &Eink{
-		BUS: gpio.Open(8, 10, Out), // PI10 SPI0_CS0
-		BUSY: gpio.Open(8, 5, In), // PI5
-		RST: gpio.Open(8, 4, Out),
-		DC: gpio.Open(8, 9, Out),
-		CS: gpio.Open(8, 8, Out),
-		SCLK: gpio.Open(8, 7, Out),
-		SDA: gpio.Open(8, 6, Out),
+		BUS: gpio.Open(8, 10, gpio.Out), // PI10 SPI0_CS0
+		BUSY: gpio.Open(8, 5, gpio.In), // PI5
+		RST: gpio.Open(8, 4, gpio.Out),
+		DC: gpio.Open(8, 9, gpio.Out),
+		CS: gpio.Open(8, 8, gpio.Out),
+		SCLK: gpio.Open(8, 7, gpio.Out),
+		SDA: gpio.Open(8, 6, gpio.Out),
 	}
 	return e
 }

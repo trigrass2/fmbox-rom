@@ -1,15 +1,25 @@
 #include <mad.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 static enum mad_flow input(void *data, struct mad_stream *stream) {
-	static char buf[20*1024*1024];
+	static char buf[32*1024];
+	int start;
 
-	int i = read(0, buf, sizeof(buf));
+	if (stream->buffer) {
+		start = sizeof(buf) - ((char *)stream->next_frame - buf);
+		memmove(buf, stream->next_frame, start);
+	} else
+		start = 0;
+
+	int i = fread(buf + start, 1, sizeof(buf) - start, stdin);
 	if (i <= 0) 
 		return MAD_FLOW_STOP;
 
-  mad_stream_buffer(stream, buf, i);
+	//fprintf(stderr, "start %d len %d\n", start, i);
+
+  mad_stream_buffer(stream, buf, start + i);
 
   return MAD_FLOW_CONTINUE;
 }
@@ -60,9 +70,11 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
 
 enum mad_flow error(void *data, struct mad_stream *stream, struct mad_frame *frame) {
 
+	/*
   fprintf(stderr, "decoding error 0x%04x (%s)\n",
 	  stream->error, mad_stream_errorstr(stream)
 		);
+		*/
 
   /* return MAD_FLOW_BREAK here to stop decoding (and propagate an error) */
 

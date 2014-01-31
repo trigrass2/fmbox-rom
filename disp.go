@@ -6,7 +6,6 @@ import (
 	"time"
 	"log"
 	"github.com/go-av/lush/m"
-	"github.com/go-av/douban.fm/mmap-gpio"
 )
 
 type LcdDisp struct {
