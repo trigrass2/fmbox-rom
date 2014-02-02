@@ -61,9 +61,7 @@ func main() {
 		for len(songList) <= 1 {
 			songList = append(songList, fm.GetSongList()...)
 		}
-		if song == nil { // first time
-			audio.CacheQueue(songList.M(0).S("url"))
-		} else {
+		if song != nil {
 			audio.DelCache(song.S("url"))
 		}
 		song = songList.M(0)

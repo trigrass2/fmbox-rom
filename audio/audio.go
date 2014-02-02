@@ -1,13 +1,12 @@
 /*
-	http mp3 caching and play
+	http mp3 caching and play (thread unsafe)
 */
 package audio
 
 import (
 	"io"
-	"net/http"
-	"sync"
 	"log"
+	"net/http"
 	"os/exec"
 
 	"github.com/go-av/fifo"
@@ -19,7 +18,6 @@ type cacheConn struct {
 	buf *fifo.Buffer
 }
 
-var cacheLock = &sync.Mutex{}
 var cachePool = map[string]*cacheConn{}
 var cacheQueue = make(chan *cacheConn, 0)
 
@@ -35,11 +33,12 @@ func doCache(conn *cacheConn) {
 		log.Println("doCache:", err2)
 	}
 	io.Copy(conn.buf, resp.Body)
+	resp.Body.Close()
 }
 
 func init() {
 	go cacheQueueThread()
-	go playThread()
+	go playQueueThread()
 }
 
 func cacheQueueThread() {
@@ -53,20 +52,16 @@ func cacheQueueThread() {
 }
 
 func DelCache(uri string) {
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
-
 	conn, ok := cachePool[uri]
 	if !ok {
 		return
 	}
 	conn.cancel = true
+	conn.buf.Close()
 	delete(cachePool, uri)
 }
 
 func CacheQueue(uri string) {
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
 	_, ok := cachePool[uri]
 	if ok {
 		return
@@ -77,37 +72,36 @@ func CacheQueue(uri string) {
 }
 
 var playQueue = make(chan *cacheConn, 0)
-var playEvent = make(chan int, 0)
 var PlayEnd = make(chan int, 0)
 
-func playThread() {
+func playQueueThread() {
 	for {
-		switch {
-		case conn := <-playQueue:
-			conn.buf.ResetRead()
-			dec := NewMp3Decoder()
-			dec.Input = conn.buf
-			dec.Output = PcmSink
-			go func () {
-				dec.Run()
-			}()
-		case e := <-playEvent:
-
+		conn := <-playQueue
+		conn.buf.ResetRead()
+		dec := exec.Command("mad")
+		dec.Stdin = conn.buf
+		dec.Stdout = PcmSink
+		if dec.Run() == nil {
+			PlayEnd <- 1
 		}
 	}
 }
 
 func Play(uri string) {
-	cacheLock.Lock()
-	defer cacheLock.Unlock()
-	conn, ok := cachePool[uri]
-	if !ok {
-		return
-	}
-	playQueue <- conn
+	CacheQueue(uri)
+	Stop()
+	playQueue <- cachePool[uri]
+}
+
+func Resume() {
+	PcmEvent <- PCM_RESUME
+}
+
+func Pause() {
+	PcmEvent <- PCM_PAUSE
 }
 
 func Stop() {
+	PcmEvent <- PCM_RESTART
 }
-
 
