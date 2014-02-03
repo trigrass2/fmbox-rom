@@ -42,8 +42,6 @@ func main() {
 	fm.LoadConf()
 	fm.Login()
 
-	log.Println("login ok")
-
 	disp := &LcdDisp{}
 
 	if runtime.GOARCH == "arm" {
@@ -59,6 +57,7 @@ func main() {
 
 	nextSong := func () {
 		for len(songList) <= 1 {
+			log.Println("getting songList")
 			songList = append(songList, fm.GetSongList()...)
 		}
 		if song != nil {
@@ -67,11 +66,12 @@ func main() {
 		song = songList.M(0)
 		songList = songList[1:]
 		disp.SongLoad(song)
-		audio.CacheQueue(songList.M(0).S("url"))
 		audio.Play(song.S("url"))
+		audio.CacheQueue(songList.M(0).S("url"))
 	}
 
 	onKey := func (i int) {
+		log.Println("onKey:", i)
 		switch i {
 		case 0: // like
 			fm.LikeSong(song)
@@ -83,6 +83,8 @@ func main() {
 			fm.TrashSong(song)
 		}
 	}
+
+	nextSong()
 
 	for {
 		select {

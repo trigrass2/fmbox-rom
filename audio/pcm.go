@@ -3,6 +3,7 @@ package audio
 
 import (
 	"io"
+	"log"
 )
 
 type PcmSink struct {
@@ -37,6 +38,10 @@ func (s *PcmSink) Restart() {
 }
 
 func (s *PcmSink) Write(p []byte) (n int, err error) {
+
+	if false {
+		log.Println("pcmSink: Write", len(p))
+	}
 
 	e := -1
 	select {

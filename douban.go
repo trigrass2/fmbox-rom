@@ -105,10 +105,13 @@ func (f *DoubanFM) Login() {
 	r := f.Api("POST", "/j/app/login", m.M{
 		"email": f.Email, "password": f.Password,
 	})
-	if len(r) > 0 {
+	if r.S("token") != "" {
 		f.ApiParam["token"] = r.S("token")
 		f.ApiParam["user_id"] = r.S("user_id")
 		f.ApiParam["expire"] = r.S("expire")
+		log.Println("douban: login ok")
+	} else {
+		log.Println("douban: login failed", r)
 	}
 }
 

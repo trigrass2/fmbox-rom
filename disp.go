@@ -13,7 +13,7 @@ type LcdDisp struct {
 
 func (ld LcdDisp) SongLoad(s m.M) {
 	dur := time.Duration(s.I64("length"))*time.Second
-	log.Println("SongLoad", s.S("title"), "-", s.S("artist"), dur)
+	log.Println("SongLoad:", s.S("title"), "-", s.S("artist"), dur, s.S("url"))
 	if runtime.GOARCH == "arm" {
 	}
 }

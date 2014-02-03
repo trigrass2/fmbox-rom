@@ -1,18 +1,18 @@
 
 package mad
 
-// #cgo CFLAGS: -I.
-// #cgo 386 LDFLAGS: libmad-386.a
-// #cgo arm LDFLAGS: libmad-arm.a
+// #cgo LDFLAGS: -lmad
 // extern int run(void *data);
 import "C"
 import "unsafe"
 import "reflect"
 import "io"
+import "log"
 
 type Decoder struct {
 	R io.Reader
 	W io.Writer
+	n int
 }
 
 func convBuf(_buf unsafe.Pointer, size C.int) (buf []byte) {
@@ -42,6 +42,10 @@ func OutputCb(_dec, _buf unsafe.Pointer, size C.int, ret *C.int) {
 	if err != nil {
 		n = -1
 	}
+	if dec.n == 0 {
+		log.Println("mad:", "audioStart")
+	}
+	dec.n += n
 	*ret = C.int(n)
 }
 
