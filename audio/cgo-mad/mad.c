@@ -6,6 +6,9 @@
 #include <stdint.h>
 #include "_cgo_export.h"
 
+void InputCb(void *, void *, int, int*);
+void OutputCb(void *, void *, int, int*);
+
 static enum mad_flow input(void *data, struct mad_stream *stream) {
 	static char buf[32*1024];
 	int start;
@@ -69,7 +72,7 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
   }
 
 	int r;
-	OutputCb(out, outp, &r);
+	OutputCb(data, out, outp, &r);
 
 	// error
 	if (r < 0)

@@ -1,7 +1,9 @@
 
 package mad
 
-// #cgo LDFLAGS: libmad.a
+// #cgo CFLAGS: -I.
+// #cgo 386 LDFLAGS: libmad-386.a
+// #cgo arm LDFLAGS: libmad-arm.a
 // extern int run(void *data);
 import "C"
 import "unsafe"
@@ -21,7 +23,7 @@ func convBuf(_buf unsafe.Pointer, size C.int) (buf []byte) {
 	return
 }
 
-// export InputCb
+//export InputCb
 func InputCb(_dec, _buf unsafe.Pointer, size C.int, ret *C.int) {
 	dec := (*Decoder)(_dec)
 	buf := convBuf(_buf, size)
@@ -32,7 +34,7 @@ func InputCb(_dec, _buf unsafe.Pointer, size C.int, ret *C.int) {
 	*ret = C.int(n)
 }
 
-// export OutputCb
+//export OutputCb
 func OutputCb(_dec, _buf unsafe.Pointer, size C.int, ret *C.int) {
 	dec := (*Decoder)(_dec)
 	buf := convBuf(_buf, size)
@@ -44,7 +46,7 @@ func OutputCb(_dec, _buf unsafe.Pointer, size C.int, ret *C.int) {
 }
 
 func (d *Decoder) Run() error {
-	r := C.run()
+	r := C.run(unsafe.Pointer(d))
 	if r < 0 {
 		return io.ErrClosedPipe
 	}
