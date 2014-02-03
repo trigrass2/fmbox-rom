@@ -1,7 +1,10 @@
+
 #include <mad.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdint.h>
+#include "_cgo_export.h"
 
 static enum mad_flow input(void *data, struct mad_stream *stream) {
 	static char buf[32*1024];
@@ -13,18 +16,19 @@ static enum mad_flow input(void *data, struct mad_stream *stream) {
 	} else
 		start = 0;
 
-	int i = fread(buf + start, 1, sizeof(buf) - start, stdin);
-	if (i <= 0) 
+	int r;
+	InputCb(data, buf + start, sizeof(buf) - start, &r);
+	if (r < 0) 
 		return MAD_FLOW_STOP;
 
 	//fprintf(stderr, "start %d len %d\n", start, i);
 
-  mad_stream_buffer(stream, buf, start + i);
+  mad_stream_buffer(stream, buf, start + r);
 
   return MAD_FLOW_CONTINUE;
 }
 
-static inline signed int scale(mad_fixed_t sample) {
+static inline int16_t scale(mad_fixed_t sample) {
   /* round */
   sample += (1L << (MAD_F_FRACBITS - 16));
 
@@ -42,6 +46,9 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
   unsigned int nchannels, nsamples;
   mad_fixed_t const *left_ch, *right_ch;
 
+	int16_t out[sizeof(pcm->samples[0])/sizeof(pcm->samples[0][0])*2];
+	int outp = 0;
+
   /* pcm->samplerate contains the sampling frequency */
 
   nchannels = pcm->channels;
@@ -50,42 +57,37 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
   right_ch  = pcm->samples[1];
 
   while (nsamples--) {
-    signed int sample;
-
     /* output sample(s) in 16-bit signed little-endian PCM */
 
-    sample = scale(*left_ch++);
-    putchar((sample >> 0) & 0xff);
-    putchar((sample >> 8) & 0xff);
+    out[outp++] = scale(*left_ch++);
 
     if (nchannels == 2) {
-      sample = scale(*right_ch++);
-      putchar((sample >> 0) & 0xff);
-      putchar((sample >> 8) & 0xff);
-    }
+      out[outp++] = scale(*right_ch++);
+    } else {
+			outp++;
+		}
   }
 
-  return MAD_FLOW_CONTINUE;
-}
+	int r;
+	OutputCb(out, outp, &r);
 
-enum mad_flow error(void *data, struct mad_stream *stream, struct mad_frame *frame) {
-
-	/*
-  fprintf(stderr, "decoding error 0x%04x (%s)\n",
-	  stream->error, mad_stream_errorstr(stream)
-		);
-		*/
-
-  /* return MAD_FLOW_BREAK here to stop decoding (and propagate an error) */
+	// error
+	if (r < 0)
+		return MAD_FLOW_BREAK;
 
   return MAD_FLOW_CONTINUE;
 }
 
-int main() {
-	struct mad_decoder decoder;
+static enum mad_flow error(void *data, struct mad_stream *stream, struct mad_frame *frame) {
+  return MAD_FLOW_CONTINUE;
+}
 
-	mad_decoder_init(&decoder, 0, input, 0, 0, output, error, 0);
-	mad_decoder_run(&decoder, MAD_DECODER_MODE_SYNC);
+int run(void *data) {
+	struct mad_decoder decoder; 
+	int r;
+	mad_decoder_init(&decoder, data, input, 0, 0, output, error, 0);
+	r = mad_decoder_run(&decoder, MAD_DECODER_MODE_SYNC);
 	mad_decoder_finish(&decoder);
+	return r;
 }
 

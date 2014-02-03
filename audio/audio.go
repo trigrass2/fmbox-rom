@@ -1,3 +1,4 @@
+
 /*
 	http mp3 caching and play (thread unsafe)
 */
@@ -80,7 +81,7 @@ func playQueueThread() {
 		conn.buf.ResetRead()
 		dec := exec.Command("mad")
 		dec.Stdin = conn.buf
-		dec.Stdout = PcmSink
+		dec.Stdout = PcmSink0
 		if dec.Run() == nil {
 			PlayEnd <- 1
 		}
@@ -94,14 +95,14 @@ func Play(uri string) {
 }
 
 func Resume() {
-	PcmEvent <- PCM_RESUME
+	PcmSink0.Resume()
 }
 
 func Pause() {
-	PcmEvent <- PCM_PAUSE
+	PcmSink0.Pause()
 }
 
 func Stop() {
-	PcmEvent <- PCM_RESTART
+	PcmSink0.Restart()
 }
 

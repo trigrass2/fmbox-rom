@@ -5,3 +5,7 @@ all:
 
 test:
 	./mad-i386 < /var/www/test.mp3 >/tmp/out 2>log
+
+clean:
+	rm mad-arm mad-i386
+
