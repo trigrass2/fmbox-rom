@@ -12,7 +12,7 @@ import (
 	"net/http"
 
 	"github.com/go-av/fifo"
-	"github.com/go-av/douban.fm/audio/cgo-mad"
+	"github.com/go-av/douban.fm/client-mad"
 )
 
 type cacheConn struct {

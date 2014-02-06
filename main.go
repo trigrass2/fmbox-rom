@@ -33,18 +33,18 @@ func consoleInputLoop() (ch chan int) {
 	return
 }
 
-func main() {
-	runtime.GOMAXPROCS(4)
+var modeFmBox = (runtime.GOARCH == "arm")
 
+func main() {
 	log.Println("starts")
 
 	fm := NewDoubanFM()
 	fm.LoadConf()
 	fm.Login()
 
-	disp := &LcdDisp{}
+	disp := &Disp{}
 
-	if runtime.GOARCH == "arm" {
+	if modeFmBox {
 		gpio.Init()
 		EIntBtnInit()
 		LedInit()
@@ -73,14 +73,16 @@ func main() {
 	onKey := func (i int) {
 		log.Println("onKey:", i)
 		switch i {
-		case 0: // like
+		case BTN_LIKE:
 			fm.LikeSong(song)
 			disp.ToggleSongLike(song)
-		case 1: // next
+		case BTN_NEXT:
 			nextSong()
-		case 2: // trash
+		case BTN_TRASH:
 			nextSong()
 			fm.TrashSong(song)
+		case BTN_PAUSE:
+			audio.Pause()
 		}
 	}
 

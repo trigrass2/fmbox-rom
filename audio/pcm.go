@@ -53,10 +53,13 @@ func (s *PcmSink) Write(p []byte) (n int, err error) {
 		switch e {
 		case pcmPause:
 			s.paused = true
+			log.Println("pcm: Pause")
 		case pcmResume:
 			s.paused = false
+			log.Println("pcm: Resume")
 		case pcmRestart:
 			err = io.ErrClosedPipe
+			log.Println("pcm: Restart")
 			return
 		}
 		if s.paused {

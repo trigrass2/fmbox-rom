@@ -8,6 +8,26 @@ import (
 
 var BtnDown = make(chan int, 0)
 
+var btnPaused bool
+
+// PI13
+func BtnSetPauseStat(b bool) {
+	if modeFmBox {
+		gpio.SetPinData(8, 13, b)
+	}
+}
+
+func BtnGetPauseStat() bool {
+	return gpio.GetPinData(8, 13)
+}
+
+const (
+	BTN_LIKE = iota
+	BTN_NEXT
+	BTN_TRASH
+	BTN_PAUSE
+)
+
 func PollEIntBtn() {
 	for {
 		l := gpio.PollEInt()

@@ -2,36 +2,22 @@
 package main
 
 import (
-	"runtime"
 	"time"
 	"log"
 	"github.com/go-av/lush/m"
 )
 
-type LcdDisp struct {
+type Disp struct {
 }
 
-func (ld LcdDisp) SongLoad(s m.M) {
+func (d Disp) SongLoad(s m.M) {
 	dur := time.Duration(s.I64("length"))*time.Second
 	log.Println("SongLoad:", s.S("title"), "-", s.S("artist"), dur, s.S("url"))
-	if runtime.GOARCH == "arm" {
-	}
+	d.ShowSongLike(s)
 }
 
-func (ld LcdDisp) SongStart() {
-	log.Println("SongStart")
-}
-
-func (ld LcdDisp) SongPos(pos time.Duration) {
-	//log.Println("SongPos", pos)
-}
-
-func (ld LcdDisp) SongEnd() {
-	log.Println("SongEnd")
-}
-
-func (ld LcdDisp) ShowSongLike(s m.M) {
-	if runtime.GOARCH == "arm" {
+func (d Disp) ShowSongLike(s m.M) {
+	if modeFmBox {
 		if s.I("like") > 0 {
 			LedSet(1.0)
 		} else {
@@ -40,6 +26,12 @@ func (ld LcdDisp) ShowSongLike(s m.M) {
 	}
 }
 
-func (ld LcdDisp) ToggleSongLike(s m.M) {
+func (d Disp) ToggleSongLike(s m.M) {
+	if s.I("like") > 0 {
+		delete(s, "like")
+	} else {
+		s["like"] = 1
+	}
+	d.ShowSongLike(s)
 }
 
