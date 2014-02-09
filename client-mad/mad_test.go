@@ -3,6 +3,7 @@ package mad
 
 import (
 	"testing"
+	"log"
 	"os"
 )
 
@@ -12,8 +13,9 @@ func TestMad(t *testing.T) {
 	f2, _ := os.Create("/tmp/out.raw")
 	dec.R = f
 	dec.W = f2
-	dec.Run()
+	err := dec.Run()
 	f.Close()
 	f2.Close()
+	log.Println(err)
 }
 

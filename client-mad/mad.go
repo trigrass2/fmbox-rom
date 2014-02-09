@@ -12,11 +12,11 @@ type Decoder struct {
 	W io.Writer
 }
 
-func (d *Decoder) Run() {
+func (d *Decoder) Run() error {
 	c, err := net.Dial("tcp", "localhost:91")
 	if err != nil {
 		log.Println("mad: dial", err)
-		return
+		return err
 	}
 	end := make(chan int, 0)
 	go func () {
@@ -27,10 +27,11 @@ func (d *Decoder) Run() {
 		io.Copy(d.W, c)
 		end <- 1
 	}()
-	io.Copy(c, d.R)
+	_, err = io.Copy(c, d.R)
 	c.(*net.TCPConn).CloseWrite()
 	<-end
 	c.Close()
+	return err
 }
 
 func NewDecoder() *Decoder {
