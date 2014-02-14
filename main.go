@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"runtime"
 	"flag"
+	"sync"
 
 	"github.com/go-av/lush/m"
 	"github.com/go-av/douban.fm/audio"
@@ -27,6 +28,7 @@ func consoleInputLoop() (ch chan int) {
 			var i int
 			n, _ := fmt.Sscanf(l, "%d", &i)
 			if n == 1 {
+				log.Println("consoleKey:", i)
 				ch <- i
 			}
 		}
@@ -39,6 +41,7 @@ var modeFmBox = (runtime.GOARCH == "arm")
 func main() {
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
+	runtime.GOMAXPROCS(2)
 
 	play := flag.String("play", "", "play mp3 file")
 	flag.Parse()
@@ -66,39 +69,52 @@ func main() {
 
 	var song m.M
 	var songList m.A
+	wg := sync.WaitGroup{}
+	wg.Add(1)
 
-	nextSong := func () {
-		for len(songList) <= 1 {
-			log.Println("getting songList")
-			songList = append(songList, fm.GetSongList()...)
-		}
-		if song != nil {
+	go func () {
+		for {
+			for len(songList) <= 1 {
+				log.Println("fm: getting songList")
+				list := fm.GetSongList()
+				songList = append(songList, list...)
+				log.Println("fm: getting songList done.", len(list), "entries loaded")
+			}
+			song = songList.M(0)
+			wg.Done()
+			wg.Add(1)
+			songList = songList[1:]
+			disp.SongLoad(song)
+			audio.CacheQueue(song.S("url"))
+			audio.CacheQueue(songList.M(0).S("url"))
+			audio.Play(song.S("url"))
 			audio.DelCache(song.S("url"))
 		}
-		song = songList.M(0)
-		songList = songList[1:]
-		disp.SongLoad(song)
-		audio.Play(song.S("url"))
-		audio.CacheQueue(songList.M(0).S("url"))
-	}
+	}()
+
+	wg.Wait()
 
 	onKey := func (i int) {
 		log.Println("onKey:", i)
 		switch i {
 		case BTN_LIKE:
+			log.Println("key:", "Like")
 			fm.LikeSong(song)
 			disp.ToggleSongLike(song)
 		case BTN_NEXT:
-			nextSong()
+			log.Println("key:", "Next")
+			audio.Stop()
+			audio.DelCache(song.S("url"))
 		case BTN_TRASH:
-			nextSong()
+			log.Println("key:", "Trash")
+			audio.Stop()
+			audio.DelCache(song.S("url"))
 			fm.TrashSong(song)
 		case BTN_PAUSE:
 			audio.Pause()
 		}
+		log.Println("key:", "done")
 	}
-
-	nextSong()
 
 	for {
 		select {
@@ -106,8 +122,6 @@ func main() {
 			onKey(k)
 		case k := <-keyStdin:
 			onKey(k)
-		case <-audio.PlayEnd:
-			nextSong()
 		}
 	}
 }

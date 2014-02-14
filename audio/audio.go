@@ -8,6 +8,7 @@ import (
 	"os"
 	"io"
 	"log"
+	"time"
 	"sync"
 	"net"
 	"net/http"
@@ -17,40 +18,47 @@ import (
 )
 
 type cacheConn struct {
-	l *sync.Mutex
 	conns []net.Conn
 	req *http.Request
 	uri string
-	cancel bool
 	buf *fifo.Buffer
+	tm time.Time
 }
 
+var cacheLock = &sync.Mutex{}
 var cachePool = map[string]*cacheConn{}
-var cacheQueue = make(chan *cacheConn, 16)
+var cacheWait = make(chan int, 1024)
+var curPlayConn *cacheConn
+
+func init() {
+	go cacheQueueThread()
+}
 
 func (c *cacheConn) Cancel() {
-	c.cancel = true
-	c.buf.Close()
-	c.l.Lock()
+	c.buf.CloseRead()
+	c.buf.CloseWrite()
+
+	cacheLock.Lock()
 	for _, nc := range c.conns {
 		if nc != nil {
 			nc.Close()
 		}
 	}
-	c.l.Unlock()
+	cacheLock.Unlock()
 }
 
-func doCache(conn *cacheConn) {
-	defer conn.buf.Close()
+func doCache(conn *cacheConn) (err error) {
 	log.Println("cacheStart:", conn.uri)
 	log.Println("cachePool:", len(cachePool), "entries")
 
 	trans := &http.Transport{
 		Dial: func (netw, addr string) (net.Conn, error) {
+			log.Println("cache:", "  Dial:", addr)
 			c, err := net.Dial(netw, addr)
-			conn.l.Lock()
+			log.Println("cache:", "  DialDone:", addr)
+			cacheLock.Lock()
 			conn.conns = append(conn.conns, c)
-			conn.l.Unlock()
+			cacheLock.Unlock()
 			return c, err
 		},
 	}
@@ -61,84 +69,99 @@ func doCache(conn *cacheConn) {
 
 	resp, err2 := cli.Do(conn.req)
 	if err2 != nil {
-		log.Println("doCache:", err2)
-		return
+		log.Println("cacheErr:", err2)
+		conn.Cancel()
+		return err2
 	}
 	if resp.Body == nil {
-		log.Println("doCache:", "http response no body")
-		return
+		log.Println("cacheErr:", "http response no body")
+		conn.Cancel()
+		return err2
 	}
-	log.Println("cacheStartData:", conn.uri)
-	_, err := io.Copy(conn.buf, resp.Body)
+	log.Println("cacheStartIo:", conn.uri)
+	n, err := io.Copy(conn.buf, resp.Body)
 	resp.Body.Close()
-	log.Println("cacheDone:", conn.uri, err)
+
+	log.Println("cacheDone:", conn.uri, err, n/1024, "KiB")
+	return nil
 }
 
-func init() {
-	go cacheQueueThread()
-	go playQueueThread()
+func latestConn() (latest *cacheConn) {
+	tm := time.Time{}
+	cacheLock.Lock()
+	for _, c := range cachePool {
+		if tm.IsZero() || (!c.tm.IsZero() && c.tm.Before(tm)) {
+			tm = c.tm
+			latest = c
+		}
+	}
+	cacheLock.Unlock()
+	return
 }
 
 func cacheQueueThread() {
 	for {
-		conn := <-cacheQueue
-		if conn.cancel {
+		<-cacheWait
+		c := latestConn()
+		if c == nil {
 			continue
 		}
-		doCache(conn)
+
+		doCache(c)
+
+		cacheLock.Lock()
+		c.tm = time.Time{}
+		cacheLock.Unlock()
 	}
 }
 
 func DelCache(uri string) {
+
+	cacheLock.Lock()
 	conn, ok := cachePool[uri]
+	cacheLock.Unlock()
 	if !ok {
+		log.Println("delCache: NotExists", uri)
 		return
 	}
+
 	conn.Cancel()
+
+	cacheLock.Lock()
 	delete(cachePool, uri)
+	cacheLock.Unlock()
 	log.Println("delCache", uri)
 }
 
-func CacheQueue(uri string) {
-	_, ok := cachePool[uri]
+func CacheQueue(uri string) (conn *cacheConn) {
+	var ok bool
+
+	cacheLock.Lock()
+	conn, ok = cachePool[uri]
+	cacheLock.Unlock()
 	if ok {
 		return
 	}
+
 	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		log.Println("cacheQueue: uri invalid", uri)
 		return
 	}
-	conn := &cacheConn{
+	conn = &cacheConn{
 		uri: uri,
 		buf: fifo.NewBuffer(),
 		req: req,
-		l: &sync.Mutex{},
+		tm: time.Now(),
 	}
+
+	cacheLock.Lock()
 	cachePool[uri] = conn
-	cacheQueue <- conn
+	cacheLock.Unlock()
+
 	log.Println("cacheQueue:", uri)
-}
-
-var playQueue = make(chan *cacheConn, 0)
-var PlayEnd = make(chan int, 0)
-
-func playQueueThread() {
-	for {
-		conn := <-playQueue
-		conn.buf.ResetRead()
-		log.Println("play:", conn.uri)
-		dec := mad.NewDecoder()
-		dec.R = conn.buf
-		dec.W = PcmSink0
-		err := dec.Run()
-		if !conn.cancel {
-			PlayEnd <- 1
-			log.Println("playEnd:", conn.uri)
-		} else {
-			log.Println("playCanceled:", conn.uri, err)
-		}
-	}
+	cacheWait <- 1
+	return
 }
 
 func PlayFile(file string) {
@@ -147,29 +170,40 @@ func PlayFile(file string) {
 		log.Println("Open:", err)
 		return
 	}
-	dec := mad.NewDecoder()
-	dec.R = f
-	dec.W = PcmSink0
-	err = dec.Run()
+	go func () {
+		time.Sleep(time.Second*3)
+		mad.StopPlay()
+	}()
+	err = mad.Play(f)
 	if err != nil {
 		log.Println("play:", err)
 	}
 }
 
 func Play(uri string) {
-	CacheQueue(uri)
-	playQueue <- cachePool[uri]
+	log.Println("play:", uri)
+	conn := CacheQueue(uri)
+	conn.buf.ResetRead()
+
+	cacheLock.Lock()
+	curPlayConn = conn
+	cacheLock.Unlock()
+
+	err := mad.Play(conn.buf)
+	if err != nil {
+		log.Println("playErr:", err)
+	}
+
+	log.Println("playEnd:", conn.uri)
 }
 
 func Resume() {
-	PcmSink0.Resume()
-}
-
-func Pause() {
-	PcmSink0.Pause()
 }
 
 func Stop() {
-	PcmSink0.Restart()
+	mad.StopPlay()
+}
+
+func Pause() {
 }
 

@@ -19,6 +19,7 @@
 typedef struct {
 	int fd;
 	char buf[1024*16];
+	int first;
 } decode_t ;
 
 static enum mad_flow input(void *data, struct mad_stream *stream) {
@@ -67,6 +68,12 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
 	int16_t out[sizeof(pcm->samples[0])/sizeof(pcm->samples[0][0])*2];
 	int outp = 0;
 
+	if (d->first) {
+		write(d->fd, &header->samplerate, 4);
+		fprintf(stderr, "output rate: %d\n", pcm->samplerate);
+		d->first = 0;
+	}
+
   /* pcm->samplerate contains the sampling frequency */
 
   nchannels = pcm->channels;
@@ -111,7 +118,9 @@ enum mad_flow error(void *data, struct mad_stream *stream, struct mad_frame *fra
 void decode_thread(int fd) {
 	struct mad_decoder decoder;
 	decode_t d;
+
 	d.fd = fd;
+	d.first = 1;
 
 	printf("decode start #%d\n", fd);
 	mad_decoder_init(&decoder, &d, input, 0, 0, output, error, 0);
