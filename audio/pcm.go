@@ -3,10 +3,12 @@ package audio
 
 import (
 	"io"
-	"log"
+	_ "log"
+	"github.com/go-av/aplay"
 )
 
 type PcmSink struct {
+	io.Writer
 	event chan int
 	paused bool
 }
@@ -21,22 +23,24 @@ var PcmSink0 = NewPcmSink()
 
 func NewPcmSink() *PcmSink {
 	return &PcmSink{
-		event: make(chan int, 16),
+		//event: make(chan int, 16),
+		Writer: aplay.Input,
 	}
 }
 
 func (s *PcmSink) Pause() {
-	s.event <- pcmPause
+	//s.event <- pcmPause
 }
 
 func (s *PcmSink) Resume() {
-	s.event <- pcmResume
+	//s.event <- pcmResume
 }
 
 func (s *PcmSink) Restart() {
-	s.event <- pcmRestart
+	//s.event <- pcmRestart
 }
 
+/*
 func (s *PcmSink) Write(p []byte) (n int, err error) {
 
 	if false {
@@ -71,4 +75,5 @@ func (s *PcmSink) Write(p []byte) (n int, err error) {
 
 	return len(p), nil
 }
+*/
 

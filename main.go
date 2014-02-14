@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"runtime"
+	"flag"
 
 	"github.com/go-av/lush/m"
 	"github.com/go-av/douban.fm/audio"
@@ -36,7 +37,18 @@ func consoleInputLoop() (ch chan int) {
 var modeFmBox = (runtime.GOARCH == "arm")
 
 func main() {
-	log.Println("starts")
+
+	log.SetFlags(log.Lshortfile|log.LstdFlags)
+
+	play := flag.String("play", "", "play mp3 file")
+	flag.Parse()
+
+	if *play != "" {
+		audio.PlayFile(*play)
+		return
+	}
+
+	log.Println("Starts fm")
 
 	fm := NewDoubanFM()
 	fm.LoadConf()

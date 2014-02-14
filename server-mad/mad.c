@@ -5,10 +5,12 @@
 
 #include <mad.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -121,11 +123,20 @@ void decode_thread(int fd) {
 	close(fd);
 }
 
+void sid_child(int signo) {  
+	pid_t pid;  
+	int stat;  
+	while ((pid = waitpid(-1, &stat, WNOHANG)) > 0);  
+}  
+
+
 int main() {
 	int fd, val;
 	struct sockaddr_in sa;
 	int r;
 	int port = 91;
+
+	signal(SIGCHLD, sid_child);
 
 	fd = socket(AF_INET, SOCK_STREAM, 0);
 	val = 1;
@@ -160,6 +171,7 @@ int main() {
 		r = fork();
 		if (r == 0) {
 			decode_thread(fd1);
+			exit(0);
 		} else if (r < 0) {
 			fprintf(stderr, "fork failed\n");
 			exit(1);

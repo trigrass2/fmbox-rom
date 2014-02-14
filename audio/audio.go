@@ -5,6 +5,7 @@
 package audio
 
 import (
+	"os"
 	"io"
 	"log"
 	"sync"
@@ -137,6 +138,21 @@ func playQueueThread() {
 		} else {
 			log.Println("playCanceled:", conn.uri, err)
 		}
+	}
+}
+
+func PlayFile(file string) {
+	f, err := os.Open(file)
+	if err != nil {
+		log.Println("Open:", err)
+		return
+	}
+	dec := mad.NewDecoder()
+	dec.R = f
+	dec.W = PcmSink0
+	err = dec.Run()
+	if err != nil {
+		log.Println("play:", err)
 	}
 }
 
