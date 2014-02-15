@@ -4,7 +4,7 @@ package main
 import (
 	"log"
 	"os"
-	_ "time"
+	"time"
 	"bufio"
 	"fmt"
 	"runtime"
@@ -44,10 +44,46 @@ func main() {
 	runtime.GOMAXPROCS(2)
 
 	play := flag.String("play", "", "play mp3 file")
+	testLed := flag.Bool("test-led", false, "test pwm led")
+	testBtn := flag.Bool("test-btn", false, "test button eint")
+	testEink := flag.Bool("test-eink", false, "test eink display")
+	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
 	flag.Parse()
+
+	disp := &Disp{}
 
 	if *play != "" {
 		audio.PlayFile(*play)
+		return
+	}
+
+	if modeFmBox {
+		gpio.Init()
+		BtnInit()
+		LedInit()
+	}
+
+	if modeFmBox && *testLed {
+		LedTest()
+		return
+	}
+
+	if modeFmBox && *testBtn {
+		BtnTest()
+		return
+	}
+
+	if modeFmBox && *testEink {
+		EinkTest()
+		return
+	}
+
+	if modeFmBox && *testGpio {
+		log.Println("PWM Wave in PI4,PI5,PI6,PI7")
+		go gpio.Open(8, 4, gpio.Out).Pwm(4, 1, time.Second/5)
+		go gpio.Open(8, 5, gpio.Out).Pwm(4, 2, time.Second/5)
+		go gpio.Open(8, 6, gpio.Out).Pwm(4, 3, time.Second/5)
+		gpio.Open(8, 7, gpio.Out).Pwm(4, 4, time.Second/5)
 		return
 	}
 
@@ -56,14 +92,6 @@ func main() {
 	fm := NewDoubanFM()
 	fm.LoadConf()
 	fm.Login()
-
-	disp := &Disp{}
-
-	if modeFmBox {
-		gpio.Init()
-		EIntBtnInit()
-		LedInit()
-	}
 
 	keyStdin := consoleInputLoop()
 
@@ -89,6 +117,7 @@ func main() {
 			audio.CacheQueue(songList.M(0).S("url"))
 			audio.Play(song.S("url"))
 			audio.DelCache(song.S("url"))
+			fm.EndSong(song)
 		}
 	}()
 
@@ -99,8 +128,9 @@ func main() {
 		switch i {
 		case BTN_LIKE:
 			log.Println("key:", "Like")
-			fm.LikeSong(song)
-			disp.ToggleSongLike(song)
+			song["like"] = (song.I("like") ^ 1)
+			disp.ShowLike(song.I("like") == 1)
+			fm.LikeSong(song, song.I("like") == 1)
 		case BTN_NEXT:
 			log.Println("key:", "Next")
 			audio.Stop()
@@ -110,8 +140,6 @@ func main() {
 			audio.Stop()
 			audio.DelCache(song.S("url"))
 			fm.TrashSong(song)
-		case BTN_PAUSE:
-			audio.Pause()
 		}
 		log.Println("key:", "done")
 	}

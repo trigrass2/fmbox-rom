@@ -21,7 +21,8 @@ func Decode(r io.Reader) (rate uint32, raw io.ReadCloser, err error) {
 	}
 
 	go func () {
-		io.Copy(c, r)
+		n, err := io.Copy(c, r)
+		log.Println("mad:", "decode done", "size", n/1024, "KiB", "err", err)
 		c.(*net.TCPConn).CloseWrite()
 	}()
 
@@ -50,8 +51,6 @@ func Play(r io.Reader) (err error) {
 		return
 	}
 
-	log.Println("mad: rate", rate)
-
 	StopPlay()
 
 	cmd := exec.Command("aplay", "-c", "2", "-f", "S16_LE", "-r", fmt.Sprint(rate))
@@ -62,11 +61,13 @@ func Play(r io.Reader) (err error) {
 		return
 	}
 
+	log.Println("mad: PlayStart samplerate", rate)
 	atomic.StorePointer(&curCmd, unsafe.Pointer(cmd))
 	_, err = io.Copy(w, raw)
 	if err != nil {
 		log.Println("mad: aplay interrupted", err)
 	}
+	w.Close()
 	raw.Close()
 	cmd.Wait()
 	log.Println("mad: aplay end")

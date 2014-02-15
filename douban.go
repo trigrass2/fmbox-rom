@@ -90,10 +90,22 @@ func (f *DoubanFM) Api(method, path string, p m.M) (j m.M) {
 	return
 }
 
-func (f *DoubanFM) TrashSong(s m.M) {
+func (f *DoubanFM) EndSong(s m.M) {
+	f.Api("GET", "/j/app/radio/people", m.M{"sid":s.S("sid"), "type":"e", "channel":f.Channel})
 }
 
-func (f *DoubanFM) LikeSong(s m.M) {
+func (f *DoubanFM) TrashSong(s m.M) {
+	f.Api("GET", "/j/app/radio/people", m.M{"sid":s.S("sid"), "type":"b", "channel":f.Channel})
+}
+
+func (f *DoubanFM) LikeSong(s m.M, like bool) {
+	t := ""
+	if like {
+		t = "r"
+	} else {
+		t = "u"
+	}
+	f.Api("GET", "/j/app/radio/people", m.M{"sid":s.S("sid"), "type":t, "channel":f.Channel})
 }
 
 func (f *DoubanFM) GetSongList() m.A {

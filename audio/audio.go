@@ -34,11 +34,9 @@ func init() {
 	go cacheQueueThread()
 }
 
-func (c *cacheConn) Cancel() {
-	c.buf.CloseRead()
-	c.buf.CloseWrite()
-
+func (c *cacheConn) Close() {
 	cacheLock.Lock()
+	c.buf.Close()
 	for _, nc := range c.conns {
 		if nc != nil {
 			nc.Close()
@@ -70,12 +68,12 @@ func doCache(conn *cacheConn) (err error) {
 	resp, err2 := cli.Do(conn.req)
 	if err2 != nil {
 		log.Println("cacheErr:", err2)
-		conn.Cancel()
+		conn.Close()
 		return err2
 	}
 	if resp.Body == nil {
 		log.Println("cacheErr:", "http response no body")
-		conn.Cancel()
+		conn.Close()
 		return err2
 	}
 	log.Println("cacheStartIo:", conn.uri)
@@ -83,6 +81,7 @@ func doCache(conn *cacheConn) (err error) {
 	resp.Body.Close()
 
 	log.Println("cacheDone:", conn.uri, err, n/1024, "KiB")
+	conn.buf.CloseWrite()
 	return nil
 }
 
@@ -90,7 +89,7 @@ func latestConn() (latest *cacheConn) {
 	tm := time.Time{}
 	cacheLock.Lock()
 	for _, c := range cachePool {
-		if tm.IsZero() || (!c.tm.IsZero() && c.tm.Before(tm)) {
+		if !c.tm.IsZero() && (tm.IsZero() || c.tm.Before(tm)) {
 			tm = c.tm
 			latest = c
 		}
@@ -125,7 +124,7 @@ func DelCache(uri string) {
 		return
 	}
 
-	conn.Cancel()
+	conn.Close()
 
 	cacheLock.Lock()
 	delete(cachePool, uri)
@@ -170,10 +169,6 @@ func PlayFile(file string) {
 		log.Println("Open:", err)
 		return
 	}
-	go func () {
-		time.Sleep(time.Second*3)
-		mad.StopPlay()
-	}()
 	err = mad.Play(f)
 	if err != nil {
 		log.Println("play:", err)

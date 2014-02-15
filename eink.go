@@ -4,7 +4,9 @@ package main
 import (
 	"time"
 	"log"
+	"fmt"
 	"github.com/go-av/a10/mmap-gpio"
+	"github.com/go-av/douban.fm/font"
 )
 
 type Eink struct {
@@ -22,12 +24,12 @@ func NewEink() *Eink {
 	// 14:SDA
 	e := &Eink{
 		BUS: gpio.Open(8, 10, gpio.Out), // PI10 SPI0_CS0
-		BUSY: gpio.Open(8, 5, gpio.In), // PI5
-		RST: gpio.Open(8, 4, gpio.Out),
-		DC: gpio.Open(8, 9, gpio.Out),
-		CS: gpio.Open(8, 8, gpio.Out),
-		SCLK: gpio.Open(8, 7, gpio.Out),
-		SDA: gpio.Open(8, 6, gpio.Out),
+		BUSY: gpio.Open(8, 4, gpio.In), // PI5
+		RST: gpio.Open(8, 5, gpio.Out),
+		DC: gpio.Open(8, 6, gpio.Out),
+		CS: gpio.Open(8, 7, gpio.Out),
+		SCLK: gpio.Open(8, 8, gpio.Out),
+		SDA: gpio.Open(8, 9, gpio.Out), //PI6
 	}
 	return e
 }
@@ -53,6 +55,7 @@ func (e *Eink) Ready() {
 func (e *Eink) Init() {
 	e.RST.L()
 	e.RST.H()
+	e.RST.L()
 	e.BUS.L()
 	e.CS.H()
 	e.SCLK.H()
@@ -180,5 +183,22 @@ func (e *Eink) Data(i byte) {
 
 func (e *Eink) Cmd(i byte) {
 	e.spi(i, false)
+}
+
+var eink = NewEink()
+
+func EinkShowImg(pic [3096]byte) {
+	eink.Init()
+	eink.Img(pic)
+}
+
+func EinkTest() {
+	now := time.Now()
+	pic := font.Img2Pic(font.AlbumImg(
+		fmt.Sprintf("今年是%d年", now.Year()),
+		fmt.Sprintf("是%d月,%d日", now.Month(), now.Day()),
+		fmt.Sprintf("%.2d:%.2d", now.Hour(), now.Minute()),
+	))
+	EinkShowImg(pic)
 }
 
