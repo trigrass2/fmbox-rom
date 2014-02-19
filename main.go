@@ -11,6 +11,7 @@ import (
 	"flag"
 	"sync"
 
+	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
 	"github.com/go-av/douban.fm/audio"
 	"github.com/go-av/a10/mmap-gpio"
@@ -38,6 +39,8 @@ func consoleInputLoop() (ch chan int) {
 
 var modeFmBox = (runtime.GOARCH == "arm")
 
+var fm *DoubanFM
+
 func main() {
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
@@ -47,7 +50,10 @@ func main() {
 	testLed := flag.Bool("test-led", false, "test pwm led")
 	testBtn := flag.Bool("test-btn", false, "test button eint")
 	testEink := flag.Bool("test-eink", false, "test eink display")
+	testOled := flag.Bool("test-oled", false, "test oled display")
 	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
+	wpacli := flag.Bool("wpa-cli", false, "wpa-cli mode")
+	ctrl := flag.String("ctrl", "ws", "control interface")
 	flag.Parse()
 
 	disp := &Disp{}
@@ -57,10 +63,20 @@ func main() {
 		return
 	}
 
+	if *wpacli {
+		wpa.DoCli(flag.Args())
+		return
+	}
+
 	if modeFmBox {
 		gpio.Init()
 		BtnInit()
 		LedInit()
+	}
+
+	if modeFmBox && *testOled {
+		OledTest()
+		return
 	}
 
 	if modeFmBox && *testLed {
@@ -87,9 +103,15 @@ func main() {
 		return
 	}
 
+	if *ctrl == "ws" {
+		go CtrlWs()
+	} else if *ctrl == "uart" {
+		go CtrlUart()
+	}
+
 	log.Println("Starts fm")
 
-	fm := NewDoubanFM()
+	fm = NewDoubanFM()
 	fm.LoadConf()
 	fm.Login()
 

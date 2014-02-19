@@ -113,7 +113,7 @@ func (f *DoubanFM) GetSongList() m.A {
 	return r.A("song")
 }
 
-func (f *DoubanFM) Login() {
+func (f *DoubanFM) Login() bool {
 	r := f.Api("POST", "/j/app/login", m.M{
 		"email": f.Email, "password": f.Password,
 	})
@@ -122,8 +122,10 @@ func (f *DoubanFM) Login() {
 		f.ApiParam["user_id"] = r.S("user_id")
 		f.ApiParam["expire"] = r.S("expire")
 		log.Println("douban: login ok")
+		return true
 	} else {
 		log.Println("douban: login failed", r)
+		return false
 	}
 }
 
