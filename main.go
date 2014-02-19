@@ -13,7 +13,7 @@ import (
 
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
-	"gitcafe.com/nuomi-studio/fmbox-rom/audio"
+	"gitcafe.com/nuomi-studio/fmbox-rom.git/audio"
 	"github.com/go-av/a10/mmap-gpio"
 )
 
