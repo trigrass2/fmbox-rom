@@ -49,7 +49,6 @@ func main() {
 	play := flag.String("play", "", "play mp3 file")
 	testLed := flag.Bool("test-led", false, "test pwm led")
 	testBtn := flag.Bool("test-btn", false, "test button eint")
-	testEink := flag.Bool("test-eink", false, "test eink display")
 	testOled := flag.Bool("test-oled", false, "test oled display")
 	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
 	wpacli := flag.Bool("wpa-cli", false, "wpa-cli mode")
@@ -86,11 +85,6 @@ func main() {
 
 	if modeFmBox && *testBtn {
 		BtnTest()
-		return
-	}
-
-	if modeFmBox && *testEink {
-		EinkTest()
 		return
 	}
 
