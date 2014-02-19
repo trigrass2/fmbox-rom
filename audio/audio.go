@@ -14,7 +14,7 @@ import (
 	"net/http"
 
 	"github.com/go-av/fifo"
-	"github.com/go-av/douban.fm/client-mad"
+	"gitcafe.com/nuomi-studio/fmbox-rom/client-mad"
 )
 
 type cacheConn struct {
