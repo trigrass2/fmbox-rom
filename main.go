@@ -119,9 +119,17 @@ func main() {
 
 	go func () {
 		for {
-			for len(songList) <= 1 {
+			for {
+				if len(songList) <= 1 {
+					break
+				}
 				log.Println("fm: getting songList")
 				list := fm.GetSongList()
+				if len(list) == 0 {
+					log.Println("fm: songList empty, retry")
+					time.Sleep(time.Second)
+					continue
+				}
 				songList = append(songList, list...)
 				log.Println("fm: getting songList done.", len(list), "entries loaded")
 			}
