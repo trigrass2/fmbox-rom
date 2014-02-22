@@ -13,7 +13,7 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/go-av/fifo"
+	"gitcafe.com/nuomi-studio/fifo.git"
 	"gitcafe.com/nuomi-studio/fmbox-rom.git/client-mad"
 )
 
