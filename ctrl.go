@@ -19,13 +19,109 @@ func ctrlWs(ws *websocket.Conn) {
 	ctrlLoop(ws)
 }
 
+var ctrlCh chan m.M = make(chan m.M, 16)
+
+func ctrlSend(r m.M) {
+	ctrlCh <- r
+}
+
+func ctrlHandle(in m.M) {
+	out := m.M{"ts":in.I64("ts")}
+
+	switch in.S("op") {
+
+	case "FmStat":
+		out["song"] = song
+		if fm.Email != "" {
+			out["email"] = fm.Email
+		}
+		ctrlSend(out)
+
+	case "FmNext":
+		BtnDown <- BTN_NEXT
+
+	case "FmTrash":
+		BtnDown <- BTN_TRASH
+
+	case "FmLike":
+		BtnDown <- BTN_LIKE
+
+	case "FmLogout":
+		fm.Logout()
+		fm.SaveConf()
+
+	case "FmLogin":
+		go func () {
+			email := in.S("Email")
+			pass := in.S("Password")
+			if fm.Login(email, pass) {
+				out["r"] = 0
+				fm.SaveConf()
+			} else {
+				out["r"] = 1
+				out["err"] = "LoginFailed"
+			}
+			ctrlSend(out)
+		}()
+
+	case "WifiScanResults":
+		out["r"] = 0
+		out["list"] = wpa.ScanResults()
+		ctrlSend(out)
+
+	case "WifiScan":
+		go func () {
+			out["r"] = 0
+			out["list"] = wpa.Scan()
+			ctrlSend(out)
+		}()
+
+	case "WifiConnect":
+		go func () {
+			ssid := in.S("Ssid")
+			bssid := in.S("Bssid")
+
+			if in.B("SetConfig") {
+				wpa.SetConfig(wpa.Config{
+					Ssid: ssid,
+					Bssid: bssid,
+					KeyMgmt: in.S("KeyMgmt"),
+					Key: in.S("Key"),
+					ScanSsid: in.B("ScanSsid"),
+				})
+			}
+
+			wpa.Connect(ssid, bssid)
+			ok := wpa.WaitCompleted(ssid, bssid, time.Second*10)
+			if !ok {
+				out["r"] = 1
+				out["err"] = "ConnectFailed"
+			} else {
+				out["r"] = 0
+			}
+
+			log.Println("ctrl:", "connect", ssid, bssid, ":", ok)
+
+			if !ok && in.B("SetConfig") {
+				wpa.DelConfig(wpa.Config{
+					Ssid: ssid,
+					Bssid: bssid,
+				})
+			}
+
+			ctrlSend(out)
+		}()
+	}
+
+}
+
 func ctrlLoop(ws io.ReadWriter) {
 	br := bufio.NewReader(ws)
-	ch := make(chan m.M, 0)
 	log.Println("ctrl:", "starts")
+
 	go func () {
 		for {
-			r, ok := <-ch
+			r, ok := <-ctrlCh
 			if !ok {
 				break
 			}
@@ -47,75 +143,10 @@ func ctrlLoop(ws io.ReadWriter) {
 			continue
 		}
 
-		if in.S("op") == "FmLogin" {
-			fm.Email = in.S("Email")
-			fm.Password = in.S("Password")
-			go func (ts int64) {
-				out := m.M{"ts": ts}
-				ok := fm.Login()
-				if ok {
-					out["r"] = 0
-				} else {
-					out["r"] = 1
-					out["err"] = "LoginFailed"
-				}
-				ch <- out
-			}(in.I64("ts"))
-		}
-
-		if in.S("op") == "WifiScanResults" {
-			ch <- m.M{"r": 0, "ts": in.I64("ts"), "list": wpa.ScanResults()}
-		}
-
-		if in.S("op") == "WifiScan" {
-			go func (ts int64) {
-				list := wpa.Scan()
-				out := m.M{"r": 0, "ts": ts , "list": list}
-				ch <- out
-			}(in.I64("ts"))
-		}
-
-		if in.S("op") == "WifiConnect" {
-			go func (ts int64) {
-				ssid := in.S("Ssid")
-				bssid := in.S("Bssid")
-
-				if in.B("SetConfig") {
-					wpa.SetConfig(wpa.Config{
-						Ssid: ssid,
-						Bssid: bssid,
-						KeyMgmt: in.S("KeyMgmt"),
-						Key: in.S("Key"),
-					})
-				}
-
-				wpa.Connect(ssid, bssid)
-				ok := wpa.WaitCompleted(ssid, bssid, time.Second*10)
-				out := m.M{"ts": ts}
-				if !ok {
-					out["r"] = 1
-					out["err"] = "ConnectFailed"
-				} else {
-					out["r"] = 0
-				}
-
-				log.Println("ctrl:", "connect", ssid, bssid, ":", ok)
-
-				if !ok && in.B("SetConfig") {
-					wpa.DelConfig(wpa.Config{
-						Ssid: ssid,
-						Bssid: bssid,
-					})
-				}
-
-				ch <- out
-			}(in.I64("ts"))
-		}
+		ctrlHandle(in)
 	}
-	close(ch)
 }
 
-// This example demonstrates a trivial echo server.
 func CtrlWs() {
 	log.Println("ctrl:", "start websocket server")
 	http.Handle("/fmbox", websocket.Handler(ctrlWs))

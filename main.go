@@ -40,6 +40,7 @@ func consoleInputLoop() (ch chan int) {
 var modeFmBox = (runtime.GOARCH == "arm")
 
 var fm *DoubanFM
+var song m.M
 
 func main() {
 
@@ -103,15 +104,15 @@ func main() {
 		go CtrlUart()
 	}
 
-	log.Println("Starts fm")
+	log.Println("starts fm")
 
 	fm = NewDoubanFM()
-	fm.LoadConf()
-	fm.Login()
+	email, pass, channel := fm.LoadConf()
+	fm.Channel = channel
+	fm.Login(email, pass)
 
 	keyStdin := consoleInputLoop()
 
-	var song m.M
 	var songList m.A
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -129,6 +130,7 @@ func main() {
 			wg.Add(1)
 			songList = songList[1:]
 			disp.SongLoad(song)
+			ctrlSend(m.M{"op": "SongLoad", "song": song})
 			audio.CacheQueue(song.S("url"))
 			audio.CacheQueue(songList.M(0).S("url"))
 			audio.Play(song.S("url"))

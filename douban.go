@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"bytes"
+	"sync"
 	"io"
 
 	"github.com/Unknwon/goconfig"
@@ -15,8 +16,11 @@ import (
 
 type DoubanFM struct {
 	ApiParam m.M
-	Email, Password, Channel string
-	Song m.A
+	Email, Password string
+	ConfSec string
+	Channel string
+
+	l *sync.Mutex
 }
 
 func NewDoubanFM() *DoubanFM {
@@ -25,41 +29,46 @@ func NewDoubanFM() *DoubanFM {
 			"app_name": "radio_desktop_win",
 			"version": "100",
 		},
+		ConfSec: "douban",
 		Channel: "0",
+		l: &sync.Mutex{},
 	}
 
 	return fm
+}
+
+func (f *DoubanFM) LoadConf() (email, pass, channel string) {
+	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
+		email, _ = c.GetValue(f.ConfSec, "email")
+		pass, _ = c.GetValue(f.ConfSec, "password")
+		channel, _ = c.GetValue(f.ConfSec, "channel")
+	}
+	return
+}
+
+func (f *DoubanFM) SaveConf() {
+	os.Create(f.confFile())
+	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
+		c.SetValue(f.ConfSec, "email", f.Email)
+		c.SetValue(f.ConfSec, "password", f.Password)
+		c.SetValue(f.ConfSec, "channel", f.Channel)
+		goconfig.SaveConfigFile(c, f.confFile())
+	}
 }
 
 func (f *DoubanFM) confFile() string {
 	return "fm.cfg"
 }
 
-func (f *DoubanFM) LoadConf() {
-	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
-		f.Email, _ = c.GetValue("user", "email")
-		f.Password , _ = c.GetValue("user", "password")
-		f.Channel, _ = c.GetValue("user", "channel")
-	}
-}
-
-func (f *DoubanFM) SaveConf() {
-	os.Create(f.confFile())
-	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
-		c.SetValue("user", "email", f.Email)
-		c.SetValue("user", "password", f.Password)
-		c.SetValue("user", "channel", f.Channel)
-		goconfig.SaveConfigFile(c, f.confFile())
-	}
-}
-
 func (f *DoubanFM) Api(method, path string, p m.M) (j m.M) {
 	u, _ := url.ParseRequestURI("http://www.douban.com"+path)
 
+	f.l.Lock()
 	q := u.Query()
 	p.Add(f.ApiParam).Each(func (k, v string) {
 		q.Set(k, v)
 	})
+	f.l.Unlock()
 
 	var resp *http.Response
 	var err error
@@ -113,14 +122,32 @@ func (f *DoubanFM) GetSongList() m.A {
 	return r.A("song")
 }
 
-func (f *DoubanFM) Login() bool {
+func (f *DoubanFM) Logout() {
+	log.Println("douban: logout")
+	f.l.Lock()
+	f.Email = ""
+	f.Password = ""
+	delete(f.ApiParam, "token")
+	delete(f.ApiParam, "user_id")
+	delete(f.ApiParam, "expire")
+	f.l.Unlock()
+}
+
+func (f *DoubanFM) Login(email, pass string) bool {
+	log.Println("douban: login")
+	if email == "" && pass == "" {
+		log.Println("douban: login missing username or password")
+		return false
+	}
 	r := f.Api("POST", "/j/app/login", m.M{
-		"email": f.Email, "password": f.Password,
+		"email": email, "password": pass,
 	})
 	if r.S("token") != "" {
+		f.l.Lock()
 		f.ApiParam["token"] = r.S("token")
 		f.ApiParam["user_id"] = r.S("user_id")
 		f.ApiParam["expire"] = r.S("expire")
+		f.l.Unlock()
 		log.Println("douban: login ok")
 		return true
 	} else {
