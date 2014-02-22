@@ -85,7 +85,7 @@ func (f *DoubanFM) Api(method, path string, p m.M) (j m.M) {
 
 	j = m.M{}
 	if err != nil {
-		log.Println(err)
+		log.Println("douban: api", err)
 		return
 	}
 
@@ -94,7 +94,7 @@ func (f *DoubanFM) Api(method, path string, p m.M) (j m.M) {
 
 	err = j.FromJson(b.String())
 	if err != nil {
-		log.Println(err)
+		log.Println("douban: api", err, q)
 		return
 	}
 

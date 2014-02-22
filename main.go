@@ -119,7 +119,10 @@ func main() {
 
 	go func () {
 		for {
-			for len(songList) <= 1 {
+			for {
+				if len(songList) > 1 {
+					break
+				}
 				log.Println("fm: getting songList")
 				if list := fm.GetSongList(); len(list) == 0 {
 					log.Println("fm: songlist empty. retry")
