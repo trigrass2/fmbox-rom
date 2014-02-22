@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"log"
-	"fmt"
+	_ "fmt"
 	"time"
 	"io"
 
@@ -19,14 +19,20 @@ func ctrlWs(ws *websocket.Conn) {
 	ctrlLoop(ws)
 }
 
-var ctrlCh chan m.M = make(chan m.M, 16)
+var ctrlCh chan m.M = make(chan m.M, 1024)
 
 func ctrlSend(r m.M) {
-	ctrlCh <- r
+	if len(ctrlCh) < 128 {
+		ctrlCh <- r
+	} else {
+		log.Println("ctrlSend:", "queue full")
+	}
 }
 
 func ctrlHandle(in m.M) {
 	out := m.M{"ts":in.I64("ts")}
+
+	log.Println("ctrl:", "op", in.S("op"))
 
 	switch in.S("op") {
 
@@ -115,8 +121,8 @@ func ctrlHandle(in m.M) {
 
 }
 
-func ctrlLoop(ws io.ReadWriter) {
-	br := bufio.NewReader(ws)
+func ctrlLoop(rw io.ReadWriter) {
+	br := bufio.NewReader(rw)
 	log.Println("ctrl:", "starts")
 
 	go func () {
@@ -126,7 +132,20 @@ func ctrlLoop(ws io.ReadWriter) {
 				break
 			}
 			log.Println("ctrl: out", r)
-			fmt.Fprintln(ws, r.Json())
+			msg := r.Json()+"\n"
+
+			var err error
+			if ws, ok := rw.(*websocket.Conn); ok {
+				err = websocket.Message.Send(ws, msg)
+			} else {
+				_, err = rw.Write([]byte(msg))
+			}
+			if err != nil {
+				log.Println("ctrl: send failed:", err)
+				ctrlCh <- r
+				break
+			}
+			log.Println("ctrl: sent", len(msg), "bytes")
 		}
 		log.Println("ctrl:", "close")
 	}()
@@ -139,10 +158,6 @@ func ctrlLoop(ws io.ReadWriter) {
 		in := m.M{}
 		in.FromJson(l)
 		log.Println("ctrl: in", in)
-		if !in.Has("ts") {
-			continue
-		}
-
 		ctrlHandle(in)
 	}
 }
@@ -150,7 +165,7 @@ func ctrlLoop(ws io.ReadWriter) {
 func CtrlWs() {
 	log.Println("ctrl:", "start websocket server")
 	http.Handle("/fmbox", websocket.Handler(ctrlWs))
-	err := http.ListenAndServe(":8888", nil)
+	err := http.ListenAndServe(":8787", nil)
 	if err != nil {
 		panic("ListenAndServe: " + err.Error())
 	}

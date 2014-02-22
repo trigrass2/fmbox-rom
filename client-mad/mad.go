@@ -4,46 +4,51 @@ package mad
 import (
 	"log"
 	"io"
-	"net"
 	"fmt"
 	"encoding/binary"
 	"os/exec"
-	"sync/atomic"
-	"unsafe"
+	"sync"
 )
 
 func Decode(r io.Reader) (rate uint32, raw io.ReadCloser, err error) {
-	var c net.Conn
-	c, err = net.Dial("tcp", "localhost:91")
+	cmd := exec.Command("mad")
+	cmd.Stdin = r
+	raw, _ = cmd.StdoutPipe()
+	err = cmd.Start()
 	if err != nil {
-		log.Println("mad: Dial", err)
+		log.Println("mad:", "start mad failed:", err)
 		return
 	}
 
-	go func () {
-		n, err := io.Copy(c, r)
-		log.Println("mad:", "decode done", "size", n/1024, "KiB", "err", err)
-		c.(*net.TCPConn).CloseWrite()
-	}()
+	lock.Lock()
+	mad = cmd
+	lock.Unlock()
 
-	err = binary.Read(c, binary.LittleEndian, &rate)
+	err = binary.Read(raw, binary.LittleEndian, &rate)
 	if err != nil {
-		log.Println("mad: getRate", err)
+		log.Println("mad: read rate failed:", err)
 	}
-	raw = c
 	return
 }
 
-var curCmd unsafe.Pointer
+var lock = &sync.Mutex{}
+var aplay *exec.Cmd
+var mad *exec.Cmd
 
 func StopPlay() {
-	oldCmd := (*exec.Cmd)(atomic.LoadPointer(&curCmd))
-	if oldCmd != nil {
-		oldCmd.Process.Kill()
+	lock.Lock()
+	if aplay != nil && aplay.Process != nil {
+		aplay.Process.Kill()
 	}
+	if mad != nil && mad.Process != nil {
+		mad.Process.Kill()
+	}
+	lock.Unlock()
 }
 
 func Play(r io.Reader) (err error) {
+	StopPlay()
+
 	var rate uint32
 	var raw io.ReadCloser
 	rate, raw, err = Decode(r)
@@ -51,27 +56,22 @@ func Play(r io.Reader) (err error) {
 		return
 	}
 
-	StopPlay()
-
 	cmd := exec.Command("aplay", "-c", "2", "-f", "S16_LE", "-r", fmt.Sprint(rate))
-	w, _ := cmd.StdinPipe()
+	cmd.Stdin = raw
 	err = cmd.Start()
 	if err != nil {
-		log.Println("mad: start aplay", err)
+		log.Println("mad: start aplay failed:", err)
 		return
 	}
 
-	log.Println("mad: PlayStart samplerate", rate)
-	atomic.StorePointer(&curCmd, unsafe.Pointer(cmd))
-	_, err = io.Copy(w, raw)
-	if err != nil {
-		log.Println("mad: aplay interrupted", err)
-	}
-	w.Close()
-	raw.Close()
-	cmd.Wait()
-	log.Println("mad: aplay end")
-	atomic.StorePointer(&curCmd, unsafe.Pointer(nil))
+	lock.Lock()
+	aplay = cmd
+	lock.Unlock()
+
+	log.Println("mad: aplay starts. samplerate", rate)
+
+	err = cmd.Wait()
+	log.Println("mad: aplay end:", err)
 
 	return
 }

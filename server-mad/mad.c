@@ -17,7 +17,7 @@
 #include <netdb.h>
 
 typedef struct {
-	int fd;
+	int r, w;
 	char buf[1024*16];
 	int first;
 } decode_t ;
@@ -32,7 +32,7 @@ static enum mad_flow input(void *data, struct mad_stream *stream) {
 	} else
 		start = 0;
 
-	int i = read(d->fd, d->buf + start, sizeof(d->buf) - start);
+	int i = read(d->r, d->buf + start, sizeof(d->buf) - start);
 	fprintf(stderr, "input read: %d\n", i);
 	if (i <= 0) {
 		fprintf(stderr, "input read: %d\n", i);
@@ -69,7 +69,7 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
 	int outp = 0;
 
 	if (d->first) {
-		write(d->fd, &header->samplerate, 4);
+		write(d->w, &header->samplerate, 4);
 		fprintf(stderr, "output rate: %d\n", pcm->samplerate);
 		d->first = 0;
 	}
@@ -92,7 +92,7 @@ enum mad_flow output(void *data, struct mad_header const *header, struct mad_pcm
 		}
 	}
 
-	int r = write(d->fd, out, outp*2);
+	int r = write(d->w, out, outp*2);
 	fprintf(stderr, "output write: %d\n", r);
 	if (r < 0) {
 		fprintf(stderr, "output failed\n");
@@ -115,21 +115,22 @@ enum mad_flow error(void *data, struct mad_stream *stream, struct mad_frame *fra
   return MAD_FLOW_CONTINUE;
 }
 
-void decode_thread(int fd) {
+void decode_thread(int r, int w) {
 	struct mad_decoder decoder;
 	decode_t d;
 
-	d.fd = fd;
+	d.r = r;
+	d.w = w;
 	d.first = 1;
 
-	printf("decode start #%d\n", fd);
+	fprintf(stderr, "decode start #%d\n", d.r);
 	mad_decoder_init(&decoder, &d, input, 0, 0, output, error, 0);
 	mad_decoder_run(&decoder, MAD_DECODER_MODE_SYNC);
 	mad_decoder_finish(&decoder);
-	printf("decode end #%d\n", fd);
+	fprintf(stderr, "decode end #%d\n", d.r);
 
-	shutdown(fd, SHUT_RDWR);
-	close(fd);
+	shutdown(d.r, SHUT_RDWR);
+	close(d.r);
 }
 
 void sid_child(int signo) {  
@@ -138,8 +139,7 @@ void sid_child(int signo) {
 	while ((pid = waitpid(-1, &stat, WNOHANG)) > 0);  
 }  
 
-
-int main() {
+void do_socket() {
 	int fd, val;
 	struct sockaddr_in sa;
 	int r;
@@ -179,13 +179,23 @@ int main() {
 
 		r = fork();
 		if (r == 0) {
-			decode_thread(fd1);
+			decode_thread(fd1, fd1);
 			exit(0);
 		} else if (r < 0) {
 			fprintf(stderr, "fork failed\n");
 			exit(1);
 		}
 	}
+}
+
+int main(int argc, char *argv[]) {
+
+	if (argc > 1 && !strcmp(argv[1], "socket")) {
+		do_socket();
+		return 0;
+	}
+
+	decode_thread(0, 1);
 
 	return 0;
 }

@@ -38,9 +38,7 @@ func (c *cacheConn) Close() {
 	cacheLock.Lock()
 	c.buf.Close()
 	for _, nc := range c.conns {
-		if nc != nil {
-			nc.Close()
-		}
+		nc.Close()
 	}
 	cacheLock.Unlock()
 }
@@ -52,11 +50,14 @@ func doCache(conn *cacheConn) (err error) {
 	trans := &http.Transport{
 		Dial: func (netw, addr string) (net.Conn, error) {
 			log.Println("cache:", "  Dial:", addr)
-			c, err := net.Dial(netw, addr)
+			c, err := net.DialTimeout(netw, addr, time.Second*6)
 			log.Println("cache:", "  DialDone:", addr)
-			cacheLock.Lock()
-			conn.conns = append(conn.conns, c)
-			cacheLock.Unlock()
+			if err == nil {
+				c.SetDeadline(time.Now().Add(time.Minute*5))
+				cacheLock.Lock()
+				conn.conns = append(conn.conns, c)
+				cacheLock.Unlock()
+			}
 			return c, err
 		},
 	}
@@ -192,13 +193,7 @@ func Play(uri string) {
 	log.Println("playEnd:", conn.uri)
 }
 
-func Resume() {
-}
-
 func Stop() {
 	mad.StopPlay()
-}
-
-func Pause() {
 }
 

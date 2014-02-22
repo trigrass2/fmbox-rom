@@ -38,6 +38,7 @@ func NewDoubanFM() *DoubanFM {
 }
 
 func (f *DoubanFM) LoadConf() (email, pass, channel string) {
+	log.Println("douban:", "load config")
 	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
 		email, _ = c.GetValue(f.ConfSec, "email")
 		pass, _ = c.GetValue(f.ConfSec, "password")
@@ -47,6 +48,7 @@ func (f *DoubanFM) LoadConf() (email, pass, channel string) {
 }
 
 func (f *DoubanFM) SaveConf() {
+	log.Println("douban:", "save config")
 	os.Create(f.confFile())
 	if c, err := goconfig.LoadConfigFile(f.confFile()); err == nil {
 		c.SetValue(f.ConfSec, "email", f.Email)
@@ -147,6 +149,8 @@ func (f *DoubanFM) Login(email, pass string) bool {
 		f.ApiParam["token"] = r.S("token")
 		f.ApiParam["user_id"] = r.S("user_id")
 		f.ApiParam["expire"] = r.S("expire")
+		f.Email = email
+		f.Password = pass
 		f.l.Unlock()
 		log.Println("douban: login ok")
 		return true
