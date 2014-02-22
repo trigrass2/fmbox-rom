@@ -120,7 +120,7 @@ func main() {
 	go func () {
 		for {
 			for {
-				if len(songList) <= 1 {
+				if len(songList) > 1 {
 					break
 				}
 				log.Println("fm: getting songList")
