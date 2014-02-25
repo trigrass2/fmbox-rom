@@ -39,6 +39,7 @@ func consoleInputLoop() (ch chan int) {
 
 var modeFmBox = (runtime.GOARCH == "arm")
 
+var oled *Oled
 var fm *DoubanFM
 var song m.M
 
@@ -50,13 +51,11 @@ func main() {
 	play := flag.String("play", "", "play mp3 file")
 	testLed := flag.Bool("test-led", false, "test pwm led")
 	testBtn := flag.Bool("test-btn", false, "test button eint")
-	testOled := flag.Bool("test-oled", false, "test oled display")
+	testOled := flag.String("test-oled", "", "test oled display: text1|text2|pattern")
 	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
 	wpacli := flag.Bool("wpa-cli", false, "wpa-cli mode")
 	ctrl := flag.String("ctrl", "ws", "control interface")
 	flag.Parse()
-
-	disp := &Disp{}
 
 	if *play != "" {
 		audio.PlayFile(*play)
@@ -72,10 +71,12 @@ func main() {
 		gpio.Init()
 		BtnInit()
 		LedInit()
+		oled = NewOled()
+		oled.Init()
 	}
 
-	if modeFmBox && *testOled {
-		OledTest()
+	if modeFmBox && *testOled != "" {
+		oled.Test(*testOled)
 		return
 	}
 
@@ -134,7 +135,7 @@ func main() {
 			wg.Done()
 			wg.Add(1)
 			songList = songList[1:]
-			disp.SongLoad(song)
+			DispSongLoad(song)
 			ctrlSend(m.M{"op": "SongLoad", "song": song})
 			audio.CacheQueue(song.S("url"))
 			audio.CacheQueue(songList.M(0).S("url"))
@@ -152,7 +153,7 @@ func main() {
 		case BTN_LIKE:
 			log.Println("key:", "Like")
 			song["like"] = (song.I("like") ^ 1)
-			disp.ShowLike(song.I("like") == 1)
+			DispShowLike(song.I("like") == 1)
 			fm.LikeSong(song, song.I("like") == 1)
 		case BTN_NEXT:
 			log.Println("key:", "Next")
@@ -163,6 +164,9 @@ func main() {
 			audio.Stop()
 			audio.DelCache(song.S("url"))
 			fm.TrashSong(song)
+		case 10:
+			log.Println("")
+
 		}
 		log.Println("key:", "done")
 	}

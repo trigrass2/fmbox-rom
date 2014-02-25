@@ -27,11 +27,16 @@ func BtnTest() {
 var lastHit [3]time.Time
 
 func btnHit(i int) {
-	if lastHit[i].IsZero() {
-		lastHit[i] = time.Now()
-	}
-	last := lastHit[i]
 	now := time.Now()
+
+	if lastHit[i].IsZero() {
+		lastHit[i] = now
+		BtnDown <- i
+		return
+	}
+
+	last := lastHit[i]
+
 	if now.Sub(last) < time.Second/5 {
 		return
 	}

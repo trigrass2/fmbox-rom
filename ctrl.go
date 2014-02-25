@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"log"
-	_ "fmt"
+	"strings"
 	"time"
 	"io"
 
@@ -121,6 +121,10 @@ func ctrlHandle(in m.M) {
 
 }
 
+func escapeAT(in string) (out string) {
+	return strings.Replace(in, "AT", `\x41\x54`, -1)
+}
+
 func ctrlLoop(rw io.ReadWriter) {
 	br := bufio.NewReader(rw)
 	log.Println("ctrl:", "starts")
@@ -133,6 +137,7 @@ func ctrlLoop(rw io.ReadWriter) {
 			}
 			log.Println("ctrl: out", r)
 			msg := r.Json()+"\n"
+			msg = escapeAT(msg)
 
 			var err error
 			if ws, ok := rw.(*websocket.Conn); ok {
@@ -174,7 +179,7 @@ func CtrlWs() {
 func CtrlUart() {
 	log.Println("ctrl:", "start uart")
 
-	uart := "/dev/ttyS4"
+	uart := "/dev/ttyS2"
 	f, err := os.OpenFile(uart, os.O_RDWR, 0744)
 	if err != nil {
 		log.Println("ctrl:", "open", uart, err)
