@@ -39,9 +39,11 @@ func StopPlay() {
 	lock.Lock()
 	if aplay != nil && aplay.Process != nil {
 		aplay.Process.Kill()
+		aplay.Wait()
 	}
 	if mad != nil && mad.Process != nil {
 		mad.Process.Kill()
+		mad.Wait()
 	}
 	lock.Unlock()
 }

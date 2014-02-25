@@ -87,34 +87,19 @@ func ctrlHandle(in m.M) {
 			ssid := in.S("Ssid")
 			bssid := in.S("Bssid")
 
-			if in.B("SetConfig") {
-				wpa.SetConfig(wpa.Config{
-					Ssid: ssid,
-					Bssid: bssid,
-					KeyMgmt: in.S("KeyMgmt"),
-					Key: in.S("Key"),
-					ScanSsid: in.B("ScanSsid"),
-				})
-			}
+			ok := wpa.Connect(ssid, bssid, wpa.Config{
+				KeyMgmt: in.S("KeyMgmt"),
+				Key: in.S("Key"),
+				ScanSsid: in.B("ScanSsid"),
+			})
 
-			wpa.Connect(ssid, bssid)
-			ok := wpa.WaitCompleted(ssid, bssid, time.Second*10)
 			if !ok {
 				out["r"] = 1
 				out["err"] = "ConnectFailed"
 			} else {
 				out["r"] = 0
 			}
-
-			log.Println("ctrl:", "connect", ssid, bssid, ":", ok)
-
-			if !ok && in.B("SetConfig") {
-				wpa.DelConfig(wpa.Config{
-					Ssid: ssid,
-					Bssid: bssid,
-				})
-			}
-
+			log.Println("ctrl:", "connect", ssid, bssid, "result:", ok)
 			ctrlSend(out)
 		}()
 	}
