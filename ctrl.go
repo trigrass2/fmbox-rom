@@ -7,7 +7,6 @@ import (
 	"os"
 	"log"
 	"strings"
-	"time"
 	"io"
 
 	"github.com/go-av/wpa"
