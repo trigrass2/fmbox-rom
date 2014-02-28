@@ -72,7 +72,6 @@ func main() {
 		BtnInit()
 		LedInit()
 		oled = NewOled()
-		oled.Init()
 	}
 
 	if modeFmBox && *testOled != "" {
@@ -146,6 +145,9 @@ func main() {
 	}()
 
 	wg.Wait()
+	if modeFmBox {
+		oled.StartUpdateThread(24)
+	}
 
 	onKey := func (i int) {
 		log.Println("onKey:", i)
@@ -154,7 +156,7 @@ func main() {
 			log.Println("key:", "Like")
 			song["like"] = (song.I("like") ^ 1)
 			DispShowLike(song.I("like") == 1)
-			fm.LikeSong(song, song.I("like") == 1)
+			go fm.LikeSong(song, song.I("like") == 1)
 		case BTN_NEXT:
 			log.Println("key:", "Next")
 			audio.Stop()
@@ -163,7 +165,7 @@ func main() {
 			log.Println("key:", "Trash")
 			audio.Stop()
 			audio.DelCache(song.S("url"))
-			fm.TrashSong(song)
+			go fm.TrashSong(song)
 		case 10:
 			log.Println("")
 
