@@ -136,6 +136,8 @@ func DelCache(uri string) {
 func CacheQueue(uri string) (conn *cacheConn) {
 	var ok bool
 
+	log.Println("cacheQueue0:", uri)
+
 	cacheLock.Lock()
 	conn, ok = cachePool[uri]
 	cacheLock.Unlock()

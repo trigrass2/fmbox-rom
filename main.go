@@ -25,7 +25,7 @@ func consoleInputLoop() (ch chan int) {
 		for {
 			l, err := br.ReadString('\n')
 			if err != nil {
-				log.Fatal(err)
+				return
 			}
 			var i int
 			n, _ := fmt.Sscanf(l, "%d", &i)
@@ -63,7 +63,7 @@ func main() {
 	flag.Parse()
 
 	if *logto != "" {
-		log.SetOutput(file.AppendTo("/var/log/fm.log").LimitSize(1024*1024))
+		log.SetOutput(file.AppendTo(*logto).LimitSize(1024*1024))
 	}
 
 	if *play != "" {

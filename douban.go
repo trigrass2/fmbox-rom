@@ -37,7 +37,7 @@ func NewDoubanFM() *DoubanFM {
 		},
 		cookie: m.M{},
 		confSec: "douban",
-		confFile: "fm.cfg",
+		confFile: "/etc/fm.cfg",
 		l: &sync.Mutex{},
 	}
 

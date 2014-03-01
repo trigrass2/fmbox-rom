@@ -126,7 +126,7 @@ func NewOled() *Oled {
 		buf: lcdbuf.New(128, 64),
 		l: &sync.Mutex{},
 	}
-	o.font, _ = pcf.Open("13px.pcf")
+	o.font, _ = pcf.Open("/etc/13px.pcf")
 	return o
 }
 

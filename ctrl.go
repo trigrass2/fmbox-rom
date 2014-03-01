@@ -21,11 +21,13 @@ func ctrlWs(ws *websocket.Conn) {
 var ctrlCh chan m.M = make(chan m.M, 1024)
 
 func ctrlSend(r m.M) {
+	log.Println("ctrlSend:", r)
 	if len(ctrlCh) < 128 {
 		ctrlCh <- r
 	} else {
 		log.Println("ctrlSend:", "queue full")
 	}
+	log.Println("ctrlSendDone:", r)
 }
 
 func ctrlHandle(in m.M) {
