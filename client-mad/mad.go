@@ -3,6 +3,7 @@ package mad
 
 import (
 	"log"
+	"time"
 	"io"
 	"fmt"
 	"encoding/binary"
@@ -48,6 +49,8 @@ func StopPlay() {
 	lock.Unlock()
 }
 
+var PlayStart time.Time
+
 func Play(r io.Reader) (err error) {
 	StopPlay()
 
@@ -70,10 +73,12 @@ func Play(r io.Reader) (err error) {
 	aplay = cmd
 	lock.Unlock()
 
+	PlayStart = time.Now()
 	log.Println("mad: aplay starts. samplerate", rate)
 
 	err = cmd.Wait()
 	log.Println("mad: aplay end:", err)
+	PlayStart = time.Time{}
 
 	return
 }

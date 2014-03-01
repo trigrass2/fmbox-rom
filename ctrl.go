@@ -37,10 +37,18 @@ func ctrlHandle(in m.M) {
 
 	case "FmStat":
 		out["song"] = song
-		if fm.Email != "" {
-			out["email"] = fm.Email
-		}
+		out["email"] = fm.CurUser()
 		ctrlSend(out)
+
+	case "FmSetChan":
+		fm.SetChan(in.S("channel"))
+		fm.SaveConf()
+
+	case "FmChanList":
+		go func () {
+			out["list"] = fm.GetChanList()
+			ctrlSend(out)
+		}()
 
 	case "FmNext":
 		BtnDown <- BTN_NEXT
@@ -58,9 +66,10 @@ func ctrlHandle(in m.M) {
 	case "FmLogin":
 		go func () {
 			email := in.S("Email")
-			pass := in.S("Password")
-			if fm.Login(email, pass) {
+			password := in.S("Password")
+			if ok, cookie := fm.Login(email, password); ok {
 				out["r"] = 0
+				fm.SetCookie(email, password, cookie)
 				fm.SaveConf()
 			} else {
 				out["r"] = 1

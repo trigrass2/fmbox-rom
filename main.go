@@ -11,6 +11,7 @@ import (
 	"flag"
 	"sync"
 
+	"github.com/go-av/file"
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
 	"gitcafe.com/nuomi-studio/fmbox-rom.git/audio"
@@ -43,19 +44,27 @@ var oled *Oled
 var fm *DoubanFM
 var song m.M
 
+var ledBright float64
+
 func main() {
 
 	log.SetFlags(log.Lshortfile|log.LstdFlags)
 	runtime.GOMAXPROCS(2)
 
 	play := flag.String("play", "", "play mp3 file")
+	flag.Float64Var(&ledBright, "led-bright", 0.3, "like led brightness")
 	testLed := flag.Bool("test-led", false, "test pwm led")
 	testBtn := flag.Bool("test-btn", false, "test button eint")
 	testOled := flag.String("test-oled", "", "test oled display: text1|text2|pattern")
 	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
 	wpacli := flag.Bool("wpa-cli", false, "wpa-cli mode")
 	ctrl := flag.String("ctrl", "ws", "control interface")
+	logto := flag.String("log", "", "rotate log to file")
 	flag.Parse()
+
+	if *logto != "" {
+		log.SetOutput(file.AppendTo("/var/log/fm.log").LimitSize(1024*1024))
+	}
 
 	if *play != "" {
 		audio.PlayFile(*play)
@@ -107,9 +116,12 @@ func main() {
 	log.Println("starts fm")
 
 	fm = NewDoubanFM()
-	email, pass, channel := fm.LoadConf()
-	fm.Channel = channel
-	fm.Login(email, pass)
+	email, password, channel := fm.LoadConf()
+	fm.SetChan(channel)
+	if ok, cookie := fm.Login(email, password); ok {
+		fm.SetCookie(email, password, cookie)
+	}
+	fm.GetChanList()
 
 	keyStdin := consoleInputLoop()
 
@@ -140,11 +152,13 @@ func main() {
 			audio.CacheQueue(songList.M(0).S("url"))
 			audio.Play(song.S("url"))
 			audio.DelCache(song.S("url"))
-			fm.EndSong(song)
+			go fm.EndSong(song)
 		}
 	}()
 
+	// wait first songlist loaded
 	wg.Wait()
+
 	if modeFmBox {
 		oled.StartUpdateThread(24)
 	}
@@ -166,9 +180,6 @@ func main() {
 			audio.Stop()
 			audio.DelCache(song.S("url"))
 			go fm.TrashSong(song)
-		case 10:
-			log.Println("")
-
 		}
 		log.Println("key:", "done")
 	}

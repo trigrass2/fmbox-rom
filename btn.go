@@ -11,8 +11,8 @@ var BtnDown = make(chan int, 0)
 
 const (
 	BTN_LIKE = iota
-	BTN_NEXT
 	BTN_TRASH
+	BTN_NEXT
 	BTN_PAUSE
 )
 
