@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"runtime"
 	"flag"
-	"sync"
 
 	"github.com/go-av/file"
 	"github.com/go-av/wpa"
@@ -42,7 +41,6 @@ var modeFmBox = (runtime.GOARCH == "arm")
 
 var oled *Oled
 var fm *DoubanFM
-var song m.M
 
 var ledBright float64
 
@@ -52,7 +50,7 @@ func main() {
 	runtime.GOMAXPROCS(2)
 
 	play := flag.String("play", "", "play mp3 file")
-	flag.Float64Var(&ledBright, "led-bright", 0.3, "like led brightness")
+	flag.Float64Var(&ledBright, "led-bright", 0.05, "like led brightness")
 	testLed := flag.Bool("test-led", false, "test pwm led")
 	testBtn := flag.Bool("test-btn", false, "test button eint")
 	testOled := flag.String("test-oled", "", "test oled display: text1|text2|pattern")
@@ -108,9 +106,9 @@ func main() {
 	}
 
 	if *ctrl == "ws" {
-		go CtrlWs()
+		go ctrlWs()
 	} else if *ctrl == "uart" {
-		go CtrlUart()
+		go ctrlUart()
 	}
 
 	log.Println("starts fm")
@@ -122,42 +120,23 @@ func main() {
 		fm.SetCookie(email, password, cookie)
 	}
 	fm.GetChanList()
+	fm.UpdateSongList()
 
 	keyStdin := consoleInputLoop()
 
-	var songList m.A
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-
 	go func () {
 		for {
-			for len(songList) <= 1 {
-				log.Println("fm: getting songList")
-				if list := fm.GetSongList(); len(list) == 0 {
-					log.Println("fm: songlist empty. retry")
-					time.Sleep(time.Second)
-					continue
-				} else {
-					log.Println("fm: getting songList done.", len(list), "entries loaded")
-					songList = append(songList, list...)
-				}
-			}
-			song = songList.M(0)
-			wg.Done()
-			wg.Add(1)
-			songList = songList[1:]
-			DispSongLoad(song)
-			ctrlSend(m.M{"op": "SongLoad", "song": song})
-			audio.CacheQueue(song.S("url"))
-			audio.CacheQueue(songList.M(0).S("url"))
-			audio.Play(song.S("url"))
-			audio.DelCache(song.S("url"))
-			go fm.EndSong(song)
+			fm.UpdateSongList()
+			DispSongLoad(fm.Song(0))
+			ctrlSend(m.M{"op": "SongLoad", "song": fm.Song(0)})
+			audio.CacheQueue(fm.Song(0).S("url"))
+			audio.CacheQueue(fm.Song(1).S("url"))
+			audio.Play(fm.Song(0).S("url"))
+			audio.DelCache(fm.Song(0).S("url"))
+			go fm.EndSong(fm.Song(0))
+			fm.Next()
 		}
 	}()
-
-	// wait first songlist loaded
-	wg.Wait()
 
 	if modeFmBox {
 		oled.StartUpdateThread(24)
@@ -165,10 +144,12 @@ func main() {
 
 	onKey := func (i int) {
 		log.Println("onKey:", i)
+		song := fm.Song(0)
 		switch i {
 		case BTN_LIKE:
 			log.Println("key:", "Like")
 			song["like"] = (song.I("like") ^ 1)
+			fm.SetSong(0, song)
 			DispShowLike(song.I("like") == 1)
 			go fm.LikeSong(song, song.I("like") == 1)
 		case BTN_NEXT:

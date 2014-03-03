@@ -10,16 +10,14 @@ import (
 	"log"
 	"time"
 	"sync"
-	"net"
-	"net/http"
 
+	"github.com/go-av/wget"
 	"gitcafe.com/nuomi-studio/fifo.git"
 	"gitcafe.com/nuomi-studio/fmbox-rom.git/client-mad"
 )
 
 type cacheConn struct {
-	conns []net.Conn
-	req *http.Request
+	req *wget.Request
 	uri string
 	buf *fifo.Buffer
 	tm time.Time
@@ -37,51 +35,26 @@ func init() {
 func (c *cacheConn) Close() {
 	cacheLock.Lock()
 	c.buf.Close()
-	for _, nc := range c.conns {
-		nc.Close()
-	}
+	c.req.Close()
 	cacheLock.Unlock()
 }
 
 func doCache(conn *cacheConn) (err error) {
-	log.Println("cacheStart:", conn.uri)
-	log.Println("cachePool:", len(cachePool), "entries")
+	log.Println("doCache: starts", conn.uri)
+	log.Println("doCache: pool has", len(cachePool), "entries")
 
-	trans := &http.Transport{
-		Dial: func (netw, addr string) (net.Conn, error) {
-			log.Println("cache:", "  Dial:", addr)
-			c, err := net.DialTimeout(netw, addr, time.Second*6)
-			log.Println("cache:", "  DialDone:", addr)
-			if err == nil {
-				c.SetDeadline(time.Now().Add(time.Minute*5))
-				cacheLock.Lock()
-				conn.conns = append(conn.conns, c)
-				cacheLock.Unlock()
-			}
-			return c, err
-		},
-	}
-
-	cli := &http.Client{
-		Transport: trans,
-	}
-
-	resp, err2 := cli.Do(conn.req)
-	if err2 != nil {
-		log.Println("cacheErr:", err2)
+	var out io.Reader
+	if out, err = conn.req.GetReader(); err != nil {
+		log.Println("doCache: wget failed:", err)
 		conn.Close()
-		return err2
+		return
 	}
-	if resp.Body == nil {
-		log.Println("cacheErr:", "http response no body")
-		conn.Close()
-		return err2
-	}
-	log.Println("cacheStartIo:", conn.uri)
-	n, err := io.Copy(conn.buf, resp.Body)
-	resp.Body.Close()
 
-	log.Println("cacheDone:", conn.uri, err, n/1024, "KiB")
+	var n int64
+	log.Println("doCache: startIo", conn.uri)
+	n, _ = io.Copy(conn.buf, out)
+
+	log.Println("doCache: done", conn.uri, err, n/1024, "KiB")
 	conn.buf.CloseWrite()
 	return nil
 }
@@ -136,8 +109,6 @@ func DelCache(uri string) {
 func CacheQueue(uri string) (conn *cacheConn) {
 	var ok bool
 
-	log.Println("cacheQueue0:", uri)
-
 	cacheLock.Lock()
 	conn, ok = cachePool[uri]
 	cacheLock.Unlock()
@@ -145,15 +116,10 @@ func CacheQueue(uri string) (conn *cacheConn) {
 		return
 	}
 
-	req, err := http.NewRequest("GET", uri, nil)
-	if err != nil {
-		log.Println("cacheQueue: uri invalid", uri)
-		return
-	}
 	conn = &cacheConn{
 		uri: uri,
 		buf: fifo.NewBuffer(),
-		req: req,
+		req: wget.NewRequest(uri, 10),
 		tm: time.Now(),
 	}
 

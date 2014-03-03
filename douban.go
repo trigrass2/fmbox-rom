@@ -4,13 +4,12 @@ package main
 import (
 	"log"
 	"fmt"
-	"net/http"
 	"net/url"
+	"time"
 	"os"
-	"bytes"
 	"sync"
-	"io"
 
+	"github.com/go-av/wget"
 	"github.com/Unknwon/goconfig"
 	"github.com/go-av/lush/m"
 )
@@ -25,6 +24,8 @@ type DoubanFM struct {
 
 	channel string
 	channels m.A
+
+	songs m.A
 
 	l *sync.Mutex
 }
@@ -77,39 +78,27 @@ func (f *DoubanFM) api(method, path string, p m.M) (j m.M) {
 	})
 	f.l.Unlock()
 
-	var resp *http.Response
-	var err error
-
 	if method == "GET" {
 		u.RawQuery = q.Encode()
-		r, _ := http.NewRequest(method, u.String(), nil)
-		resp, err = http.DefaultClient.Do(r)
+		j = wget.NewRequest(u.String(), 0).GetJson()
 	} else {
-		resp, err = http.PostForm(u.String(), q)
-	}
-
-	j = m.M{}
-	if err != nil {
-		log.Println("douban: api", err)
-		return
-	}
-
-	b := new(bytes.Buffer)
-	io.Copy(b, resp.Body)
-
-	err = j.FromJson(b.String())
-	if err != nil {
-		log.Println("douban: api", err, q)
-		return
+		r := wget.NewRequest(u.String(), 0)
+		r.PostData = q.Encode()
+		j = r.GetJson()
 	}
 
 	return
 }
 
-func (f *DoubanFM) SetChan(channel string) {
+func (f *DoubanFM) SetChan(channel string) (changed bool) {
 	f.l.Lock()
-	f.channel = channel
+	if f.channel != channel {
+		f.channel = channel
+		f.songs = m.A{}
+		changed = true
+	}
 	f.l.Unlock()
+	return
 }
 
 func (f *DoubanFM) CurChan() string {
@@ -131,10 +120,22 @@ func (f *DoubanFM) CurChanInfo() (rc m.M) {
 }
 
 func (f *DoubanFM) GetChanList() m.A {
-	r := f.api("GET", "/j/app/radio/channels", m.M{})
+	var a m.A
+	for {
+		log.Println("douban:", "getting channels list")
+		r := f.api("GET", "/j/app/radio/channels", m.M{})
+		a = r.A("channels")
+		if len(a) > 0 {
+			break
+		}
+		log.Println("douban:", "  get channel empty, retry")
+		time.Sleep(time.Second)
+	}
 	f.l.Lock()
-	f.channels = r.A("channels")
-	log.Println("douban: getChanList", f.channels)
+	f.channels = a
+	f.channels.Each(func (c m.M) {
+		log.Println("  ", c)
+	})
 	f.l.Unlock()
 	return f.channels
 }
@@ -157,18 +158,52 @@ func (f *DoubanFM) LikeSong(s m.M, like bool) {
 	f.api("GET", "/j/app/radio/people", m.M{"sid":s.S("sid"), "type":t, "channel":f.CurChan()})
 }
 
-func (f *DoubanFM) GetSongList() m.A {
-	r := f.api("GET", "/j/app/radio/people", m.M{"type":"n", "channel":f.CurChan()})
-	a := r.A("song")
-
+func (f *DoubanFM) Next() {
 	f.l.Lock()
-	if len(a) == 0 {
-		log.Println("douban:", "cannot get songs in channel", f.channel, ". change to 1")
-		f.channel = "1"
+	defer f.l.Unlock()
+	if len(f.songs) > 0 {
+		f.songs = f.songs[1:]
 	}
-	f.l.Unlock()
+}
 
-	return a
+func (f *DoubanFM) SetSong(i int, s m.M) {
+	f.l.Lock()
+	defer f.l.Unlock()
+	if i < len(f.songs) {
+		f.songs[i] = s
+	}
+}
+
+func (f *DoubanFM) Song(i int) m.M {
+	f.l.Lock()
+	defer f.l.Unlock()
+	if i < len(f.songs) {
+		return f.songs.M(i)
+	}
+	return m.M{}
+}
+
+func (f *DoubanFM) UpdateSongList() {
+	for {
+		f.l.Lock()
+		if len(f.songs) >= 2 {
+			f.l.Unlock()
+			break
+		}
+		f.l.Unlock()
+
+		log.Println("douban:", "getting song list")
+		r := f.api("GET", "/j/app/radio/people", m.M{"type":"n", "channel":f.CurChan()})
+		a := r.A("song")
+
+		f.l.Lock()
+		if len(a) == 0 {
+			f.channel = "1"
+			log.Println("douban:   getsonglist failed: fall back to channel 1")
+		}
+		f.songs = append(f.songs, a...)
+		f.l.Unlock()
+	}
 }
 
 func (f *DoubanFM) Logout() {

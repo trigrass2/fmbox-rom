@@ -8,29 +8,27 @@ import (
 	"log"
 	"strings"
 	"io"
+	"net"
+	"time"
+	"sync"
 
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
 	"code.google.com/p/go.net/websocket"
 )
 
-func ctrlWs(ws *websocket.Conn) {
-	ctrlLoop(ws)
+var ctrlLock = &sync.Mutex{}
+var ctrlChans = m.A{}
+
+func ctrlSend(in m.M) {
+	ctrlLock.Lock()
+	ctrlChans.Each(func (ch chan m.M) {
+		ch <- in
+	})
+	ctrlLock.Unlock()
 }
 
-var ctrlCh chan m.M = make(chan m.M, 1024)
-
-func ctrlSend(r m.M) {
-	log.Println("ctrlSend:", r)
-	if len(ctrlCh) < 128 {
-		ctrlCh <- r
-	} else {
-		log.Println("ctrlSend:", "queue full")
-	}
-	log.Println("ctrlSendDone:", r)
-}
-
-func ctrlHandle(in m.M) {
+func ctrlHandle(ch chan m.M, in m.M) {
 	out := m.M{"ts":in.I64("ts")}
 
 	log.Println("ctrl:", "op", in.S("op"))
@@ -38,18 +36,20 @@ func ctrlHandle(in m.M) {
 	switch in.S("op") {
 
 	case "FmStat":
-		out["song"] = song
+		out["song"] = fm.Song(0)
 		out["email"] = fm.CurUser()
-		ctrlSend(out)
+		ch <- out
 
 	case "FmSetChan":
-		fm.SetChan(in.S("channel"))
-		fm.SaveConf()
+		if fm.SetChan(in.S("channel")) {
+			fm.SaveConf()
+			BtnDown <- BTN_NEXT
+		}
 
 	case "FmChanList":
 		go func () {
 			out["list"] = fm.GetChanList()
-			ctrlSend(out)
+			ch <- out
 		}()
 
 	case "FmNext":
@@ -77,19 +77,19 @@ func ctrlHandle(in m.M) {
 				out["r"] = 1
 				out["err"] = "LoginFailed"
 			}
-			ctrlSend(out)
+			ch <- out
 		}()
 
 	case "WifiScanResults":
 		out["r"] = 0
 		out["list"] = wpa.ScanResults()
-		ctrlSend(out)
+		ch <- out
 
 	case "WifiScan":
 		go func () {
 			out["r"] = 0
 			out["list"] = wpa.Scan()
-			ctrlSend(out)
+			ch <- out
 		}()
 
 	case "WifiConnect":
@@ -110,7 +110,7 @@ func ctrlHandle(in m.M) {
 				out["r"] = 0
 			}
 			log.Println("ctrl:", "connect", ssid, bssid, "result:", ok)
-			ctrlSend(out)
+			ch <- out
 		}()
 	}
 
@@ -122,17 +122,24 @@ func escapeAT(in string) (out string) {
 
 func ctrlLoop(rw io.ReadWriter) {
 	br := bufio.NewReader(rw)
-	log.Println("ctrl:", "starts")
+	log.Println("ctrl:", "loop starts")
+
+	ch := make(chan m.M, 1024)
+	ctrlLock.Lock()
+	ctrlChans = append(ctrlChans, ch)
+	ctrlLock.Unlock()
 
 	go func () {
 		for {
-			r, ok := <-ctrlCh
+			r, ok := <-ch
 			if !ok {
 				break
 			}
 			log.Println("ctrl: out", r)
 			msg := r.Json()+"\n"
 			msg = escapeAT(msg)
+
+			log.Println("ctrl: out", r)
 
 			var err error
 			if ws, ok := rw.(*websocket.Conn); ok {
@@ -142,12 +149,12 @@ func ctrlLoop(rw io.ReadWriter) {
 			}
 			if err != nil {
 				log.Println("ctrl: send failed:", err)
-				ctrlCh <- r
+				ch <- r
 				break
 			}
 			log.Println("ctrl: sent", len(msg), "bytes")
 		}
-		log.Println("ctrl:", "close")
+		log.Println("ctrl:", "conn close")
 	}()
 
 	for {
@@ -158,20 +165,28 @@ func ctrlLoop(rw io.ReadWriter) {
 		in := m.M{}
 		in.FromJson(l)
 		log.Println("ctrl: in", in)
-		ctrlHandle(in)
+		ctrlHandle(ch, in)
 	}
+
+	ctrlLock.Lock()
+	ctrlChans = ctrlChans.Del(ch)
+	ctrlLock.Unlock()
 }
 
-func CtrlWs() {
+func ctrlWs() {
 	log.Println("ctrl:", "start websocket server")
-	http.Handle("/fmbox", websocket.Handler(ctrlWs))
+	http.Handle("/fmbox", websocket.Handler(func (ws *websocket.Conn) {
+		log.Println("ctrl:", "websocket accept")
+		ctrlLoop(ws)
+		log.Println("ctrl:", "websocket close")
+	}))
 	err := http.ListenAndServe(":8787", nil)
 	if err != nil {
-		panic("ListenAndServe: " + err.Error())
+		log.Println("ctrl: websocket listen failed:", err)
 	}
 }
 
-func CtrlUart() {
+func ctrlUart() {
 	log.Println("ctrl:", "start uart")
 
 	uart := "/dev/ttyS2"
@@ -182,5 +197,22 @@ func CtrlUart() {
 	}
 
 	ctrlLoop(f)
+}
+
+func ctrlReverseTcp() {
+	log.Println("ctrl:", "start reverse tcp")
+
+	addr := "125.39.155.32:1984"
+	for {
+		conn, err := net.DialTimeout("tcp4", addr, time.Second*20)
+		if err != nil {
+			log.Println("ctrl:", "dial", err)
+			time.Sleep(time.Second)
+			continue
+		}
+		log.Println("ctrl:", "reverse tcp connected")
+		ctrlLoop(conn)
+		log.Println("ctrl:", "reverse tcp close")
+	}
 }
 
