@@ -135,11 +135,10 @@ func ctrlLoop(rw io.ReadWriter) {
 			if !ok {
 				break
 			}
-			log.Println("ctrl: out", r)
 			msg := r.Json()+"\n"
 			msg = escapeAT(msg)
 
-			log.Println("ctrl: out", r)
+			log.Println("ctrl: out", msg[0:len(msg)-2])
 
 			var err error
 			if ws, ok := rw.(*websocket.Conn); ok {
