@@ -73,10 +73,12 @@ func (f *DoubanFM) api(method, path string, p m.M) (j m.M) {
 
 	f.l.Lock()
 	q := u.Query()
-	p.Add(f.apiParam).Each(func (k, v string) {
+	p.Add(f.apiParam).Add(f.cookie).Each(func (k, v string) {
 		q.Set(k, v)
 	})
 	f.l.Unlock()
+
+	log.Println("douban:", "api:", path, p)
 
 	if method == "GET" {
 		u.RawQuery = q.Encode()
@@ -197,10 +199,10 @@ func (f *DoubanFM) UpdateSongList() {
 		a := r.A("song")
 
 		f.l.Lock()
-		if len(a) == 0 {
-			f.channel = "1"
-			log.Println("douban:   getsonglist failed: fall back to channel 1")
-		}
+		//if len(a) == 0 {
+		//	f.channel = "1"
+		//	log.Println("douban:   getsonglist failed: fall back to channel 1")
+		//}
 		f.songs = append(f.songs, a...)
 		f.l.Unlock()
 	}
