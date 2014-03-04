@@ -134,7 +134,7 @@ func main() {
 	go func () {
 		for {
 			btLedOp.Hide = uartLastAlive.IsZero() || time.Now().Sub(uartLastAlive) > time.Second*5
-			wifiLedOp.Hide = wpa.Status() == "COMPLETED"
+			wifiLedOp.Hide = !( wpa.Status() == "COMPLETED" )
 			time.Sleep(time.Second*5)
 		}
 	}()
