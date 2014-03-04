@@ -43,6 +43,7 @@ var oled *Oled
 var fm *DoubanFM
 
 var ledBright float64
+var debugApi bool
 
 func main() {
 
@@ -56,8 +57,9 @@ func main() {
 	testOled := flag.String("test-oled", "", "test oled display: text1|text2|pattern")
 	testGpio := flag.Bool("test-gpio", false, "test gpio pins")
 	wpacli := flag.Bool("wpa-cli", false, "wpa-cli mode")
-	ctrl := flag.String("ctrl", "ws", "control interface")
+	ctrl := flag.String("ctrl", "uart", "control interface")
 	logto := flag.String("log", "", "rotate log to file")
+	flag.BoolVar(&debugApi, "debug-api", false, "debug douban api")
 	flag.Parse()
 
 	if *logto != "" {
@@ -113,14 +115,29 @@ func main() {
 
 	log.Println("starts fm")
 
+	oled.SetOps([]*OledOp{
+		&OledOp{Str:"连接中..", Y:1, X:40},
+		wifiLedOp, btLedOp,
+	})
+
 	fm = NewDoubanFM()
 	email, password, channel := fm.LoadConf()
 	fm.SetChan(channel)
 	if ok, cookie := fm.Login(email, password); ok {
-		fm.SetCookie(email, password, cookie)
+		fm.SetCookie(cookie)
 	}
 	fm.GetChanList()
 	fm.UpdateSongList()
+
+	wifiLedOp.Hide = false
+
+	go func () {
+		for {
+			btLedOp.Hide = uartLastAlive.IsZero() || time.Now().Sub(uartLastAlive) > time.Second*5
+			wifiLedOp.Hide = wpa.Status() == "COMPLETED"
+			time.Sleep(time.Second*5)
+		}
+	}()
 
 	keyStdin := consoleInputLoop()
 
@@ -128,7 +145,7 @@ func main() {
 		for {
 			fm.UpdateSongList()
 			DispSongLoad(fm.Song(0))
-			ctrlSend(m.M{"op": "SongLoad", "song": fm.Song(0)})
+			ctrlSend(m.M{"op": "SongLoad", "song": fm.Song(0), "channel": fm.CurChan()})
 			audio.CacheQueue(fm.Song(0).S("url"))
 			audio.CacheQueue(fm.Song(1).S("url"))
 			audio.Play(fm.Song(0).S("url"))
@@ -151,6 +168,7 @@ func main() {
 			song["like"] = (song.I("like") ^ 1)
 			fm.SetSong(0, song)
 			DispShowLike(song.I("like") == 1)
+			ctrlSend(m.M{"op": "SongLike", "like": song.I("like") == 1})
 			go fm.LikeSong(song, song.I("like") == 1)
 		case BTN_NEXT:
 			log.Println("key:", "Next")

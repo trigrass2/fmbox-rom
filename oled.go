@@ -13,10 +13,11 @@ import (
 type OledOp struct {
 	StrCb func () string
 	Str string
+	Hide bool
 	Inverse bool
 	X, Y, W int
 	Scroll bool
-	buf *lcdbuf.Buf
+	Buf *lcdbuf.Buf
 	tm int
 }
 
@@ -31,12 +32,14 @@ func (o *Oled) initOp(op *OledOp) {
 	if op.StrCb != nil {
 		op.Str = op.StrCb()
 	}
-	op.buf = lcdbuf.PCFText(o.font, op.Str)
+	if op.Buf == nil {
+		op.Buf = lcdbuf.PCFText(o.font, op.Str)
+	}
 	if op.Inverse {
-		op.buf.Inverse()
+		op.Buf.Inverse()
 	}
 	op.tm = 0
-	if op.buf.W < o.buf.W {
+	if op.Scroll && op.X+op.Buf.W < o.buf.W {
 		op.Scroll = false
 	}
 }
@@ -58,7 +61,7 @@ func (o *Oled) SetOps(ops []*OledOp) {
 }
 
 func (o *Oled) getScrollOffset(op *OledOp) int {
-	sw := op.buf.W - o.buf.W
+	sw := op.X+op.Buf.W - o.buf.W
 	tm := op.tm
 	pause := 20
 
@@ -97,14 +100,16 @@ func (o *Oled) Update() {
 			str := op.StrCb()
 			if op.Str != str {
 				op.Str = str
-				op.buf = lcdbuf.PCFText(o.font, op.Str)
+				op.Buf = lcdbuf.PCFText(o.font, op.Str)
 			}
 		}
-		if op.Scroll {
-			off := o.getScrollOffset(op)
-			lcdbuf.DrawOffset(o.buf, op.buf, op.X, op.Y*16, off)
-		} else {
-			lcdbuf.Draw(o.buf, op.buf, op.X, op.Y*16)
+		if !op.Hide {
+			if op.Scroll {
+				off := o.getScrollOffset(op)
+				lcdbuf.DrawOffset(o.buf, op.Buf, op.X, op.Y*16, off)
+			} else {
+				lcdbuf.Draw(o.buf, op.Buf, op.X, op.Y*16)
+			}
 		}
 		op.tm++
 	}

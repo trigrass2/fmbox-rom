@@ -12,6 +12,7 @@ import (
 	"time"
 	"sync"
 
+	"gitcafe.com/nuomi-studio/fmbox-rom.git/audio"
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
 	"code.google.com/p/go.net/websocket"
@@ -19,6 +20,8 @@ import (
 
 var ctrlLock = &sync.Mutex{}
 var ctrlChans = m.A{}
+
+var uartLastAlive time.Time
 
 func ctrlSend(in m.M) {
 	ctrlLock.Lock()
@@ -29,7 +32,7 @@ func ctrlSend(in m.M) {
 }
 
 func ctrlHandle(ch chan m.M, in m.M) {
-	out := m.M{"ts":in.I64("ts")}
+	out := m.M{"id":in.S("id"), "r":0}
 
 	log.Println("ctrl:", "op", in.S("op"))
 
@@ -42,6 +45,7 @@ func ctrlHandle(ch chan m.M, in m.M) {
 
 	case "FmSetChan":
 		if fm.SetChan(in.S("channel")) {
+			audio.DelAllCache()
 			fm.SaveConf()
 			BtnDown <- BTN_NEXT
 		}
@@ -71,7 +75,7 @@ func ctrlHandle(ch chan m.M, in m.M) {
 			password := in.S("Password")
 			if ok, cookie := fm.Login(email, password); ok {
 				out["r"] = 0
-				fm.SetCookie(email, password, cookie)
+				fm.SetCookie(cookie)
 				fm.SaveConf()
 			} else {
 				out["r"] = 1
@@ -112,6 +116,9 @@ func ctrlHandle(ch chan m.M, in m.M) {
 			log.Println("ctrl:", "connect", ssid, bssid, "result:", ok)
 			ch <- out
 		}()
+	case "Hello":
+		out["op"] = "Hello"
+		ch <- out
 	}
 
 }
@@ -120,7 +127,7 @@ func escapeAT(in string) (out string) {
 	return strings.Replace(in, "AT", `\x41\x54`, -1)
 }
 
-func ctrlLoop(rw io.ReadWriter) {
+func ctrlLoop(from string, rw io.ReadWriter) {
 	br := bufio.NewReader(rw)
 	log.Println("ctrl:", "loop starts")
 
@@ -161,6 +168,10 @@ func ctrlLoop(rw io.ReadWriter) {
 		if err != nil {
 			break
 		}
+		if from == "uart" {
+			btLedOp.Hide = false
+			uartLastAlive = time.Now()
+		}
 		in := m.M{}
 		in.FromJson(l)
 		log.Println("ctrl: in", in)
@@ -172,11 +183,12 @@ func ctrlLoop(rw io.ReadWriter) {
 	ctrlLock.Unlock()
 }
 
+
 func ctrlWs() {
 	log.Println("ctrl:", "start websocket server")
 	http.Handle("/fmbox", websocket.Handler(func (ws *websocket.Conn) {
 		log.Println("ctrl:", "websocket accept")
-		ctrlLoop(ws)
+		ctrlLoop("ws", ws)
 		log.Println("ctrl:", "websocket close")
 	}))
 	err := http.ListenAndServe(":8787", nil)
@@ -195,7 +207,7 @@ func ctrlUart() {
 		return
 	}
 
-	ctrlLoop(f)
+	ctrlLoop("uart", f)
 }
 
 func ctrlReverseTcp() {
@@ -210,7 +222,7 @@ func ctrlReverseTcp() {
 			continue
 		}
 		log.Println("ctrl:", "reverse tcp connected")
-		ctrlLoop(conn)
+		ctrlLoop("tcp", conn)
 		log.Println("ctrl:", "reverse tcp close")
 	}
 }

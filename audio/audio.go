@@ -33,10 +33,8 @@ func init() {
 }
 
 func (c *cacheConn) Close() {
-	cacheLock.Lock()
 	c.buf.Close()
 	c.req.Close()
-	cacheLock.Unlock()
 }
 
 func doCache(conn *cacheConn) (err error) {
@@ -88,22 +86,25 @@ func cacheQueueThread() {
 	}
 }
 
-func DelCache(uri string) {
-
+func DelAllCache() {
+	log.Println("cache:", "del all")
 	cacheLock.Lock()
-	conn, ok := cachePool[uri]
-	cacheLock.Unlock()
-	if !ok {
-		log.Println("delCache: NotExists", uri)
-		return
+	for _, conn := range cachePool {
+		conn.Close()
 	}
+	cachePool = map[string]*cacheConn{}
+	cacheLock.Unlock()
+}
 
-	conn.Close()
-
+func DelCache(uri string) {
 	cacheLock.Lock()
+	if conn, ok := cachePool[uri]; !ok {
+		log.Println("cache:", "del", uri)
+	} else {
+		conn.Close()
+	}
 	delete(cachePool, uri)
 	cacheLock.Unlock()
-	log.Println("delCache", uri)
 }
 
 func CacheQueue(uri string) (conn *cacheConn) {

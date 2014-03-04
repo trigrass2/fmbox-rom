@@ -17,7 +17,6 @@ import (
 type DoubanFM struct {
 	apiParam m.M
 	cookie m.M
-	email, password string
 
 	confFile string
 	confSec string
@@ -61,8 +60,8 @@ func (f *DoubanFM) SaveConf() {
 	log.Println("douban:", "save config")
 	os.Create(f.confFile)
 	if c, err := goconfig.LoadConfigFile(f.confFile); err == nil {
-		c.SetValue(f.confSec, "email", f.email)
-		c.SetValue(f.confSec, "password", f.password)
+		c.SetValue(f.confSec, "email", f.cookie.S("email"))
+		c.SetValue(f.confSec, "password", f.cookie.S("password"))
 		c.SetValue(f.confSec, "channel", f.channel)
 		goconfig.SaveConfigFile(c, f.confFile)
 	}
@@ -73,9 +72,12 @@ func (f *DoubanFM) api(method, path string, p m.M) (j m.M) {
 
 	f.l.Lock()
 	q := u.Query()
-	p.Add(f.apiParam).Add(f.cookie).Each(func (k, v string) {
+	p.Add(f.apiParam).Each(func (k, v string) {
 		q.Set(k, v)
 	})
+	q.Set("token", f.cookie.S("token"))
+	q.Set("user_id", f.cookie.S("user_id"))
+	q.Set("expire", f.cookie.S("expire"))
 	f.l.Unlock()
 
 	log.Println("douban:", "api:", path, p)
@@ -87,6 +89,10 @@ func (f *DoubanFM) api(method, path string, p m.M) (j m.M) {
 		r := wget.NewRequest(u.String(), 0)
 		r.PostData = q.Encode()
 		j = r.GetJson()
+	}
+
+	if debugApi {
+		log.Println("douban:", "api ret:", j)
 	}
 
 	return
@@ -121,8 +127,15 @@ func (f *DoubanFM) CurChanInfo() (rc m.M) {
 	return
 }
 
-func (f *DoubanFM) GetChanList() m.A {
-	var a m.A
+func (f *DoubanFM) GetChanList() (a m.A) {
+	f.l.Lock()
+	a = f.channels
+	f.l.Unlock()
+
+	if len(a) > 0 {
+		return
+	}
+
 	for {
 		log.Println("douban:", "getting channels list")
 		r := f.api("GET", "/j/app/radio/channels", m.M{})
@@ -133,13 +146,15 @@ func (f *DoubanFM) GetChanList() m.A {
 		log.Println("douban:", "  get channel empty, retry")
 		time.Sleep(time.Second)
 	}
+
 	f.l.Lock()
 	f.channels = a
-	f.channels.Each(func (c m.M) {
+	f.l.Unlock()
+
+	a.Each(func (c m.M) {
 		log.Println("  ", c)
 	})
-	f.l.Unlock()
-	return f.channels
+	return
 }
 
 func (f *DoubanFM) EndSong(s m.M) {
@@ -211,8 +226,6 @@ func (f *DoubanFM) UpdateSongList() {
 func (f *DoubanFM) Logout() {
 	log.Println("douban: logout")
 	f.l.Lock()
-	f.email = ""
-	f.password = ""
 	f.cookie = m.M{}
 	f.l.Unlock()
 }
@@ -220,13 +233,11 @@ func (f *DoubanFM) Logout() {
 func (f *DoubanFM) CurUser() string {
 	f.l.Lock()
 	defer f.l.Unlock()
-	return f.email
+	return f.cookie.S("email")
 }
 
-func (f *DoubanFM) SetCookie(email, password string, cookie m.M) {
+func (f *DoubanFM) SetCookie(cookie m.M) {
 	f.l.Lock()
-	f.email = email
-	f.password = password
 	f.cookie = cookie
 	f.l.Unlock()
 }
@@ -245,6 +256,8 @@ func (f *DoubanFM) Login(email, password string) (ok bool, cookie m.M) {
 			"token": r.S("token"),
 			"user_id": r.S("user_id"),
 			"expire": r.S("expire"),
+			"email": email,
+			"password": password,
 		}
 		log.Println("douban: login ok")
 		ok = true
