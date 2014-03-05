@@ -3,8 +3,8 @@ package main
 
 import (
 	"github.com/go-av/a10/mmap-gpio"
-	"gitcafe.com/nuomi-studio/lcdbuf.git"
-	"gitcafe.com/nuomi-studio/pcf.git"
+	"github.com/go-av/lcdbuf"
+	"github.com/go-av/pcf"
 	"time"
 	"log"
 	"sync"

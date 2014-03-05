@@ -12,8 +12,8 @@ import (
 	"sync"
 
 	"github.com/go-av/wget"
-	"gitcafe.com/nuomi-studio/fifo.git"
-	"gitcafe.com/nuomi-studio/fmbox-rom.git/client-mad"
+	"github.com/go-av/fifo"
+	"github.com/go-av/fmbox-rom/client-mad"
 )
 
 type cacheConn struct {

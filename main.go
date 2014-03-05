@@ -13,7 +13,7 @@ import (
 	"github.com/go-av/file"
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
-	"gitcafe.com/nuomi-studio/fmbox-rom.git/audio"
+	"github.com/go-av/fmbox-rom/audio"
 	"github.com/go-av/a10/mmap-gpio"
 )
 
@@ -113,6 +113,10 @@ func main() {
 		go ctrlUart()
 	}
 
+	if modeFmBox {
+		oled.StartUpdateThread(24)
+	}
+
 	log.Println("starts fm")
 
 	oled.SetOps([]*OledOp{
@@ -154,10 +158,6 @@ func main() {
 			fm.Next()
 		}
 	}()
-
-	if modeFmBox {
-		oled.StartUpdateThread(24)
-	}
 
 	onKey := func (i int) {
 		log.Println("onKey:", i)

@@ -12,7 +12,7 @@ import (
 	"time"
 	"sync"
 
-	"gitcafe.com/nuomi-studio/fmbox-rom.git/audio"
+	"github.com/go-av/fmbox-rom/audio"
 	"github.com/go-av/wpa"
 	"github.com/go-av/lush/m"
 	"code.google.com/p/go.net/websocket"

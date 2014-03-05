@@ -6,8 +6,8 @@ import (
 	"log"
 	"fmt"
 	"github.com/go-av/lush/m"
-	"gitcafe.com/nuomi-studio/fmbox-rom.git/client-mad"
-	"gitcafe.com/nuomi-studio/lcdbuf.git"
+	"github.com/go-av/fmbox-rom/client-mad"
+	"github.com/go-av/lcdbuf"
 )
 
 var btLogo = &lcdbuf.Buf{
